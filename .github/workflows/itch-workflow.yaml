@@ -1,0 +1,129 @@
+name: Build & Deploy to itch.io
+
+on:
+  push:
+    tags:
+      - 'v*'           # e.g. v1.0.0 -> deploy com version
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Itch.io channel (ex: html5, web, demo)"
+        required: false
+        default: "html5"
+      dry_run:
+        description: "Só buildar, sem publicar no itch.io"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false","true"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: itch-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  BUILD_DIR: dist
+  ARTIFACT_NAME: dist-itch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Zip dist for itch.io
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          zip -r "../${{ env.ARTIFACT_NAME }}.zip" .
+          cd -
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.zip
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      BUTLER_API_KEY: ${{ secrets.ITCH_IO_API_KEY }}
+      ITCH_USER: ${{ secrets.ITCH_IO_USER }}
+      ITCH_GAME: ${{ secrets.ITCH_IO_GAME }}
+      CHANNEL_INPUT: ${{ github.event.inputs.channel }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: .
+
+      - name: Mostrar versão e canal
+        id: meta
+        run: |
+          # deduz canal
+          if [ -n "${CHANNEL_INPUT}" ]; then CHANNEL="${CHANNEL_INPUT}"; else CHANNEL="html5"; fi
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+
+          # deduz versão a partir da tag (ex: refs/tags/v1.2.3)
+          REF="${GITHUB_REF#refs/tags/}"
+          if [[ "$REF" == v* ]]; then
+            USER_VERSION="${REF#v}"
+          else
+            USER_VERSION=""
+          fi
+          echo "userversion=${USER_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Validar secrets
+        run: |
+          : "${BUTLER_API_KEY:?Defina o secret ITCH_IO_API_KEY}"
+          : "${ITCH_USER:?Defina o secret ITCH_IO_USER}"
+          : "${ITCH_GAME:?Defina o secret ITCH_IO_GAME}"
+
+      - name: Instalar butler (linux amd64)
+        run: |
+          set -e
+          curl -L "https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default" -o butler.zip
+          sudo unzip -o butler.zip -d /usr/local/bin
+          which butler
+          butler -V
+
+      - name: Publicar no itch.io (ou dry run)
+        run: |
+          set -e
+          TARGET="${ITCH_USER}/${ITCH_GAME}:${{ steps.meta.outputs.channel }}"
+          ZIP="${{ env.ARTIFACT_NAME }}.zip"
+
+          echo "Destino: $TARGET"
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "Dry run: validando arquivo e autenticando..."
+            test -f "$ZIP"
+            butler status || true
+            butler validate "$ZIP"
+            exit 0
+          fi
+
+          if [ -n "${{ steps.meta.outputs.userversion }}" ]; then
+            butler push "$ZIP" "$TARGET" --userversion "${{ steps.meta.outputs.userversion }}"
+          else
+            butler push "$ZIP" "$TARGET"
+          fi
