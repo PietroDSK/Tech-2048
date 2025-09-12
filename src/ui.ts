@@ -27,11 +27,11 @@ export function showGameOver(lang: Lang, score: number): Promise<AlertResult> {
 function ensureModalExists(){
   if (document.getElementById('modalOverlay')) return
   const overlay = document.createElement('div'); overlay.id = 'modalOverlay'; overlay.className = 'modal hidden'
-  overlay.innerHTML = \`
+  overlay.innerHTML = `
     <div class="modal-dialog">
       <div class="modal-header"><h3 id="modalTitle">Title</h3></div>
       <div class="modal-body"><p id="modalBody">Body</p></div>
       <div class="modal-actions"><button id="modalPrimary" class="btn primary">OK</button><button id="modalSecondary" class="btn ghost">Close</button></div>
-    </div>\`
+    </div>`
   document.body.appendChild(overlay)
 }
