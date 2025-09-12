@@ -1,4 +1,5 @@
 import type { Direction } from './board'
+
 export function setupKeyboard(onDir: (d:Direction)=>void){
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase()
@@ -9,13 +10,42 @@ export function setupKeyboard(onDir: (d:Direction)=>void){
     if(k==='arrowright'||k==='d') onDir('right')
   })
 }
+
 export function setupTouch(el: HTMLElement, onDir: (d:Direction)=>void){
-  let sx=0, sy=0, active=false; const threshold=24
-  el.addEventListener('touchstart', (e) => { active=true; const t=e.touches[0]; sx=t.clientX; sy=t.clientY }, {passive:true})
+  let sx = 0, sy = 0, active = false
+  const threshold = 24
+
+  // IMPORTANTE: passive:false para poder chamar preventDefault()
+  el.addEventListener('touchstart', (e) => {
+    active = true
+    const t = e.touches[0]
+    sx = t.clientX
+    sy = t.clientY
+    e.preventDefault()
+  }, { passive: false })
+
   el.addEventListener('touchmove', (e) => {
-    if(!active) return; const t=e.touches[0]; const dx=t.clientX-sx; const dy=t.clientY-sy
-    if(Math.abs(dx)<threshold && Math.abs(dy)<threshold) return; active=false
-    if(Math.abs(dx)>Math.abs(dy)) onDir(dx>0?'right':'left'); else onDir(dy>0?'down':'up')
-  }, {passive:true})
-  el.addEventListener('touchend', ()=>{ active=false })
+    if (!active) return
+    e.preventDefault() // bloqueia scroll/pull-to-refresh enquanto o gesto está ativo
+    const t = e.touches[0]
+    const dx = t.clientX - sx
+    const dy = t.clientY - sy
+    if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return
+
+    active = false
+    if (Math.abs(dx) > Math.abs(dy)) {
+      onDir(dx > 0 ? 'right' : 'left')
+    } else {
+      onDir(dy > 0 ? 'down' : 'up')
+    }
+  }, { passive: false })
+
+  el.addEventListener('touchend', (e) => {
+    if (!active) return
+    active = false
+    e.preventDefault()
+  }, { passive: false })
+
+  // (Opcional) cancelar toques fora do canvas enquanto ativo:
+  // document.addEventListener('touchmove', e => { if(active) e.preventDefault() }, { passive:false })
 }
