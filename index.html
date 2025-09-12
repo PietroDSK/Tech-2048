@@ -1,1 +1,83 @@
 <!-- index.html consent stub with privacy link -->
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"
+    />
+    <title>2048 TECH</title>
+    <meta name="theme-color" content="#0b1220" />
+
+    <!-- Manifest (opcional, se você já usa PWA) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Consent Mode v2 (defaults); atualizado pelo modal em src/consent.ts -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){ dataLayer.push(arguments); }
+      gtag('consent', 'default', {
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied',
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'functionality_storage': 'granted',
+        'security_storage': 'granted'
+      });
+    </script>
+    <!-- Se usar Google Analytics/Adsense, seus scripts devem vir após o consent ser atualizado -->
+  </head>
+
+  <body>
+    <header class="topbar">
+      <h1 data-i18n="title">2048 TECH</h1>
+
+      <div class="scores">
+        <div class="score-box">
+          <span data-i18n="score">Pontuação</span>: <span id="score">0</span>
+        </div>
+        <div class="score-box">
+          <span data-i18n="best">Recorde</span>: <span id="best">0</span>
+        </div>
+      </div>
+
+      <button id="btnMenu" class="icon-btn" aria-label="Menu" title="Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3 6h18M3 12h18M3 18h18"
+                stroke="#e6f1ff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <main class="container">
+      <canvas id="game" width="600" height="600" aria-label="Tabuleiro 2048"></canvas>
+
+      <aside class="panel" id="rightPanel">
+        <p class="hint">
+          <span data-i18n="hint">
+            Use as setas do teclado (ou arraste no celular). Combine blocos iguais para chegar em 2048.
+          </span>
+        </p>
+
+        <!-- Banner lateral (web/desktop). O AdsManager injeta o conteúdo em #adSidebarSlot -->
+        <div id="adSidebar" class="ad-card" aria-label="Publicidade">
+          <p class="ad-title">Publicidade</p>
+          <div id="adSidebarSlot" class="ad-placeholder">Banner 300×250</div>
+        </div>
+
+        <!-- Link para reabrir preferências de privacidade -->
+        <div class="privacy-reopen">
+          <button id="privacyLink" class="btn ghost" data-i18n="privacy.link">
+            Preferências de privacidade
+          </button>
+        </div>
+      </aside>
+    </main>
+
+    <!-- O menu e modais (incl. consentimento) são criados dinamicamente por JS -->
+
+    <!-- Entrada do app (Vite) -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
