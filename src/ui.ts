@@ -35,3 +35,47 @@ function ensureModalExists(){
     </div>`
   document.body.appendChild(overlay)
 }
+export function ensureSettingsMenu(){
+  if (document.getElementById('menuOverlay')) return
+  const overlay = document.createElement('div')
+  overlay.id = 'menuOverlay'
+  overlay.className = 'modal hidden'
+  overlay.innerHTML = `
+    <div class="modal-dialog" role="dialog" aria-labelledby="menuTitle">
+      <div class="modal-header">
+        <h3 id="menuTitle">Menu</h3>
+      </div>
+      <div class="modal-body">
+        <div class="settings-list">
+          <div class="settings-row">
+            <label for="menuToggleLabels"><span data-i18n="labels">Rótulos Tech</span></label>
+            <input type="checkbox" id="menuToggleLabels">
+          </div>
+          <div class="settings-row">
+            <label for="menuToggleSound"><span data-i18n="sound">Sons</span></label>
+            <input type="checkbox" id="menuToggleSound">
+          </div>
+          <div class="settings-row">
+            <label for="menuLangSelect"><span data-i18n="lang">Idioma</span></label>
+            <select id="menuLangSelect">
+              <option value="pt-BR">pt-BR</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <button id="menuNewGame" class="btn" data-i18n="newGame">Novo jogo</button>
+            <button id="menuClose" class="btn ghost">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+}
+export function openSettingsMenu(){
+  const overlay = document.getElementById('menuOverlay') as HTMLDivElement
+  overlay?.classList.remove('hidden'); overlay?.classList.add('show')
+}
+export function closeSettingsMenu(){
+  const overlay = document.getElementById('menuOverlay') as HTMLDivElement
+  overlay?.classList.remove('show'); overlay?.classList.add('hidden')
+}
