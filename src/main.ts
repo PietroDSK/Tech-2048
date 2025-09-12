@@ -1,27 +1,38 @@
 import '../styles.css'
 import { Game } from './game'
 import { setupKeyboard, setupTouch } from './input'
-import { getBest, setBest, getLabelsPref, setLabelsPref, getGameState, setGameState, clearGameState, getSoundPref, setSoundPref, getLangPref, setLangPref, type Lang } from './storage'
+import {
+  getBest, setBest,
+  getLabelsPref, setLabelsPref,
+  getGameState, setGameState, clearGameState,
+  getSoundPref, setSoundPref,
+  getLangPref, setLangPref,
+  type Lang
+} from './storage'
 import { SFX } from './sfx'
 import { applyI18n } from './i18n'
 import { showGameOver, ensureSettingsMenu, openSettingsMenu, closeSettingsMenu } from './ui'
 import { AdsManager } from './ads'
+import { isNative, initAdMob, showBannerBottom, hideBanner, maybeShowInterstitialEvery } from './native-ads'
 
+// --- DOM refs ---
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const scoreEl = document.getElementById('score')!
 const bestEl = document.getElementById('best')!
 const btnNew = document.getElementById('newGame') as HTMLButtonElement | null
 const btnMenu = document.getElementById('btnMenu') as HTMLButtonElement
 
+// --- Core ---
 const sfx = new SFX()
 const game = new Game(canvas); game.setSFX(sfx)
 
-// Preferências iniciais
+// --- Preferências iniciais ---
 game.setLabels(getLabelsPref())
 sfx.enabled = getSoundPref()
-let lang: Lang = getLangPref(); applyI18n(lang)
+let lang: Lang = getLangPref()
+applyI18n(lang)
 
-function updateUI(){
+function updateUI() {
   scoreEl.textContent = String(game.score)
   if (game.score > game.best) {
     game.setBest(game.score)
@@ -30,7 +41,7 @@ function updateUI(){
   }
 }
 
-// Constrói e integra o Menu
+// --- Menu (overlay) ---
 ensureSettingsMenu()
 const menuOverlay = document.getElementById('menuOverlay') as HTMLDivElement
 const menuLabels = document.getElementById('menuToggleLabels') as HTMLInputElement
@@ -39,8 +50,8 @@ const menuLang = document.getElementById('menuLangSelect') as HTMLSelectElement
 const menuNew = document.getElementById('menuNewGame') as HTMLButtonElement
 const menuClose = document.getElementById('menuClose') as HTMLButtonElement
 
-// Sincroniza antes de abrir
 btnMenu?.addEventListener('click', () => {
+  // sincroniza antes de abrir
   menuLabels.checked = (game as any).useLabels ?? false
   menuSound.checked = (sfx as any).enabled ?? true
   menuLang.value = lang
@@ -49,45 +60,126 @@ btnMenu?.addEventListener('click', () => {
 menuOverlay?.addEventListener('click', (e) => { if (e.target === menuOverlay) closeSettingsMenu() })
 menuClose?.addEventListener('click', () => closeSettingsMenu())
 
-menuNew?.addEventListener('click', () => { game.newGame(); updateUI(); closeSettingsMenu() })
-menuLabels?.addEventListener('change', () => { game.setLabels(menuLabels.checked); setLabelsPref(menuLabels.checked); game.render() })
-menuSound?.addEventListener('change', () => { sfx.enabled = menuSound.checked; setSoundPref(menuSound.checked) })
-menuLang?.addEventListener('change', () => { lang = menuLang.value as Lang; setLangPref(lang); applyI18n(lang) })
+menuLabels?.addEventListener('change', () => {
+  game.setLabels(menuLabels.checked)
+  setLabelsPref(menuLabels.checked)
+  game.render()
+})
+menuSound?.addEventListener('change', () => {
+  sfx.enabled = menuSound.checked
+  setSoundPref(menuSound.checked)
+})
+menuLang?.addEventListener('change', () => {
+  lang = menuLang.value as Lang
+  setLangPref(lang)
+  applyI18n(lang)
+})
 
-// Controles extras (se existir botão "Novo jogo" fora do menu)
-btnNew?.addEventListener('click', () => { game.newGame(); updateUI(); saveState() })
+// --- Ads (web + nativo) ---
+const ads = new AdsManager({
+  // Troque para 'adsense' e preencha clientId/slot se quiser usar AdSense no web
+  network: 'adsense', // 'none' | 'adsense' | 'custom'
+  // adsenseClientId: "ca-pub-8826867524630571",
+  // adsenseBannerSlotId: '2306720556',
+  bannerHTML: `
+    <a href="https://example.com" target="_blank" rel="noopener" class="ad-box" style="display:block;text-decoration:none">
+      <div class="ad-placeholder">Seu banner 300×250</div>
+    </a>
+  `,
+  interstitialHTML: `
+    <a href="https://example.com" target="_blank" rel="noopener" class="ad-box" style="display:block;text-decoration:none">
+      <div class="ad-placeholder">Interstitial promo</div>
+    </a>
+  `,
+  mobileFrequency: 3,
+})
 
-setupKeyboard((dir)=>{ game.step(dir); updateUI(); saveState(); checkEnd() })
-setupTouch(canvas, (dir)=>{ game.step(dir); updateUI(); saveState(); checkEnd() })
+// Inicialização condicionada a plataforma
+;(async () => {
+  if (await isNative()) {
+    // App Android (Capacitor): AdMob nativo
+    await initAdMob()
+    await showBannerBottom() // banner nativo no rodapé
+  } else {
+    // Web / navegdor: banner lateral no painel
+    ads.initDesktopBanner()
+  }
+})()
 
+// --- Novo jogo (do menu) com interstitial por plataforma ---
+menuNew?.addEventListener('click', async () => {
+  if (await isNative()) {
+    await maybeShowInterstitialEvery(3) // a cada 3 partidas no Android (AdMob nativo)
+  } else {
+    await ads.maybeShowMobileInterstitial() // web/mobile
+  }
+  game.newGame()
+  updateUI()
+  closeSettingsMenu()
+})
+
+// --- Controles extras (se existir botão "Novo jogo" fora do menu) ---
+btnNew?.addEventListener('click', async () => {
+  if (await isNative()) {
+    await maybeShowInterstitialEvery(3)
+  } else {
+    await ads.maybeShowMobileInterstitial()
+  }
+  game.newGame()
+  updateUI()
+  saveState()
+})
+
+// --- Input ---
+setupKeyboard((dir) => { game.step(dir); updateUI(); saveState(); checkEnd() })
+setupTouch(canvas, (dir) => { game.step(dir); updateUI(); saveState(); checkEnd() })
+
+// --- Estado salvo ---
 const saved = getGameState()
-if(saved){
-  try { (game as any).board.loadFrom(saved.cells); (game as any).score = saved.score; game.render(); updateUI() }
-  catch { game.newGame(); updateUI() }
+if (saved) {
+  try {
+    (game as any).board.loadFrom(saved.cells)
+    (game as any).score = saved.score
+    game.render()
+    updateUI()
+  } catch {
+    game.newGame()
+    updateUI()
+  }
 } else {
-  game.newGame(); updateUI()
+  game.newGame()
+  updateUI()
 }
 
+function saveState() {
+  const snap = (game as any).snapshot()
+  setGameState(snap)
+}
 
-
-function saveState(){ const snap = (game as any).snapshot(); setGameState(snap) }
-function checkEnd(){
+function checkEnd() {
   if ((game as any).inputLocked) return
-  if (!(game as any)['board'].canMove()){
-    setTimeout(()=>{
-      showGameOver(lang, (game as any).score).then(res => {
+  if (!(game as any)['board'].canMove()) {
+    setTimeout(() => {
+      showGameOver(lang, (game as any).score).then(async res => {
         clearGameState()
-        if(res==='new'){ game.newGame(); updateUI() }
+        if (res === 'new') {
+          if (await isNative()) {
+            await maybeShowInterstitialEvery(3)
+          } else {
+            await ads.maybeShowMobileInterstitial()
+          }
+          game.newGame()
+          updateUI()
+        }
       })
     }, 20)
   }
 }
 
-// --- PWA SW registration (seguro para itch.io) ---
+// --- PWA SW registration (seguro para itch.io e ignorado no app nativo) ---
 const isProd = (import.meta as any).env?.PROD === true
-function inIframe(){ try { return window.self !== window.top } catch { return true } }
-function ensurePWABanner(){
-  if (!inIframe()) return
+function inIframe() { try { return window.self !== window.top } catch { return true } }
+function ensurePWABanner() {
   if (document.getElementById('pwaBanner')) return
   const div = document.createElement('div')
   div.id = 'pwaBanner'
@@ -110,34 +202,20 @@ function ensurePWABanner(){
   btn.addEventListener('click', () => { window.open(location.href, '_blank', 'noopener') })
 }
 
-if ('serviceWorker' in navigator) {
-  if (isProd && !inIframe()) {
-    (async () => {
-      try {
-        await navigator.serviceWorker.register('sw.js')
-      } catch (err) {
-        console.warn('SW register failed:', err)
+;(async () => {
+  const native = await isNative()
+  if ('serviceWorker' in navigator) {
+    if (!native && isProd && !inIframe()) {
+      try { await navigator.serviceWorker.register('sw.js') } catch (err) { console.warn('SW register failed:', err) }
+    } else {
+      // Em DEV, em iframe (itch) ou no app nativo → não manter SW
+      navigator.serviceWorker.getRegistrations?.().then(rs => rs.forEach(r => r.unregister()))
+      if ('caches' in globalThis) {
+        (caches as CacheStorage).keys().then(keys => keys.forEach(k => (caches as CacheStorage).delete(k)))
       }
-    })()
-  } else {
-    navigator.serviceWorker.getRegistrations?.().then(rs => rs.forEach(r => r.unregister()))
-    if ('caches' in globalThis) {
-      (caches as CacheStorage).keys().then(keys => keys.forEach(k => (caches as CacheStorage).delete(k)))
+      if (!native) ensurePWABanner()
     }
-    ensurePWABanner()
+  } else {
+    if (!native) ensurePWABanner()
   }
-} else {
-  ensurePWABanner()
-}
-
-// --- Ads (configure aqui) ---
-const ads = new AdsManager({
-  // Troque para 'adsense' e preencha IDs para produção
-  network: 'adsense', // 'none' | 'adsense' | 'custom'
-  adsenseClientId: 'ca-pub-8826867524630571',
-  adsenseBannerSlotId: '2306720556',
-  mobileFrequency: 3, // a cada 3 novas partidas no mobile
-})
-
-// Banner desktop (só carrega se houver painel visível)
-ads.initDesktopBanner()
+})()
