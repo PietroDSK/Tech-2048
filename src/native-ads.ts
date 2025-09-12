@@ -1,59 +1,55 @@
-import { Capacitor } from '@capacitor/core'
+// src/native-ads.ts
+import { Capacitor } from '@capacitor/core';
 import {
-  AdMob, BannerAdOptions, BannerAdPosition, BannerAdSize,
-  BannerAdPluginEvents, BannerAd, InterstitialAd, InterstitialAdOptions
-} from '@capacitor-community/admob'
+  AdMob,
+  BannerAdOptions,
+  BannerAdSize,
+  BannerAdPosition,
+  BannerAdPluginEvents,
+  type AdMobBannerSize,
+  AdmobConsentStatus,
+} from '@capacitor-community/admob';
 
-const TEST_APP_ID = 'ca-app-pub-3940256099942544~3347511713'
-const TEST_BANNER_UNIT = 'ca-app-pub-3940256099942544/6300978111'
-const TEST_INTERSTITIAL_UNIT = 'ca-app-pub-3940256099942544/1033173712'
+/** Chame isso no boot do app (ex.: main.ts) */
+export async function initAds() {
+  if (Capacitor.getPlatform() === 'web') return; // TWA/PWA não tem camada nativa
+  await AdMob.initialize();
 
-const KEY_ATTEMPTS = 'tech2048_mobile_attempts'
-
-export async function isNative(): Promise<boolean> {
-  return Capacitor.isNativePlatform()
-}
-
-export async function initAdMob() {
-  if (!Capacitor.isNativePlatform()) return
-  // Em DEV: initializeForTesting true (remove em prod)
-  await AdMob.initialize({ initializeForTesting: true })
-  // (Opcional) tracking authorization para iOS; no Android ignora
-}
-
-let bannerId: string | null = null
-
-export async function showBannerBottom(unitId?: string) {
-  if (!Capacitor.isNativePlatform()) return
-  // Ocupa largura da tela (smart banner)
-  const options: BannerAdOptions = {
-    adId: unitId ?? TEST_BANNER_UNIT,
-    adSize: BannerAdSize.SMART_BANNER,
-    position: BannerAdPosition.BOTTOM_CENTER,
-    margin: 0
+  // (Opcional) GDPR/UMP: solicita/mostra consentimento quando necessário
+  const consentInfo = await AdMob.requestConsentInfo();
+  if (consentInfo.isConsentFormAvailable && consentInfo.status === AdmobConsentStatus.REQUIRED) {
+    await AdMob.showConsentForm();
   }
-  const { adId } = await BannerAd.show(options)
-  bannerId = adId
-  // (Opcional) listeners
-  BannerAd.addListener(BannerAdPluginEvents.Loaded, () => {})
-  BannerAd.addListener(BannerAdPluginEvents.SizeChanged, () => {})
+}
+
+/** Mostra um banner fixo. Use seu adUnitId real aqui. */
+export async function showBanner(adUnitId: string) {
+  if (Capacitor.getPlatform() === 'web') return;
+
+  // Ajusta o padding da UI conforme a altura do banner
+  AdMob.addListener(BannerAdPluginEvents.SizeChanged, (size: AdMobBannerSize) => {
+    document.body.style.paddingBottom = `${size.height}px`;
+  });
+
+  const options: BannerAdOptions = {
+    adId: adUnitId,
+    adSize: BannerAdSize.ADAPTIVE_BANNER,    // ou BannerAdSize.BANNER
+    position: BannerAdPosition.BOTTOM_CENTER,
+    margin: 0,
+    // isTesting: true, // habilite em dev
+    // npa: true,       // non-personalized ads se precisar
+  };
+
+  await AdMob.showBanner(options);
 }
 
 export async function hideBanner() {
-  if (!Capacitor.isNativePlatform()) return
-  try { await BannerAd.hide() } catch {}
-  bannerId = null
+  if (Capacitor.getPlatform() === 'web') return;
+  await AdMob.hideBanner();
 }
 
-export async function maybeShowInterstitialEvery(freq=3, unitId?: string) {
-  if (!Capacitor.isNativePlatform()) return
-  const n = (parseInt(localStorage.getItem(KEY_ATTEMPTS) ?? '0', 10) || 0) + 1
-  localStorage.setItem(KEY_ATTEMPTS, String(n))
-  if (n % freq !== 0) return
-
-  const opts: InterstitialAdOptions = {
-    adId: unitId ?? TEST_INTERSTITIAL_UNIT,
-  }
-  await InterstitialAd.load(opts)
-  await InterstitialAd.show()
+export async function removeBanner() {
+  if (Capacitor.getPlatform() === 'web') return;
+  document.body.style.paddingBottom = '0px';
+  await AdMob.removeBanner();
 }
