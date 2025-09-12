@@ -73,3 +73,46 @@ body {
   -webkit-touch-callout: none;
   user-select: none;
 }
+/* Banner lateral (desktop) */
+#adSidebar {
+  display: none;               /* escondido por padrão (mobile) */
+}
+@media (min-width: 900px) {
+  #adSidebar {
+    display: block;
+  }
+}
+.ad-card {
+  background: #0f1720;
+  border: 1px solid #1a2330;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: inset 0 0 24px rgba(57,192,255,.06);
+}
+.ad-card .ad-title {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+/* Interstitial (reusa o sistema de modal existente) */
+#adInterstitial .modal-dialog {
+  width: min(92vw, 520px);
+}
+.ad-box {
+  background:#0c1117;
+  border:1px solid #1a2330;
+  border-radius:12px;
+  padding:10px;
+  text-align:center;
+  min-height:160px; /* área segura para o criativo */
+}
+.ad-placeholder {
+  width:100%; height:140px;
+  background: repeating-linear-gradient(
+    45deg,#142032,#142032 12px,#0f1720 12px,#0f1720 24px
+  );
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  color:#7b8ba1; font-weight:600;
+}

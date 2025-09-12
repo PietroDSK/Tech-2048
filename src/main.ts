@@ -5,6 +5,7 @@ import { getBest, setBest, getLabelsPref, setLabelsPref, getGameState, setGameSt
 import { SFX } from './sfx'
 import { applyI18n } from './i18n'
 import { showGameOver, ensureSettingsMenu, openSettingsMenu, closeSettingsMenu } from './ui'
+import { AdsManager } from './ads'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const scoreEl = document.getElementById('score')!
@@ -67,6 +68,8 @@ if(saved){
   game.newGame(); updateUI()
 }
 
+
+
 function saveState(){ const snap = (game as any).snapshot(); setGameState(snap) }
 function checkEnd(){
   if ((game as any).inputLocked) return
@@ -126,3 +129,15 @@ if ('serviceWorker' in navigator) {
 } else {
   ensurePWABanner()
 }
+
+// --- Ads (configure aqui) ---
+const ads = new AdsManager({
+  // Troque para 'adsense' e preencha IDs para produção
+  network: 'adsense', // 'none' | 'adsense' | 'custom'
+  adsenseClientId: 'ca-pub-8826867524630571',
+  adsenseBannerSlotId: '2306720556',
+  mobileFrequency: 3, // a cada 3 novas partidas no mobile
+})
+
+// Banner desktop (só carrega se houver painel visível)
+ads.initDesktopBanner()
