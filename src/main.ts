@@ -126,4 +126,3 @@ if ('serviceWorker' in navigator) {
 } else {
   ensurePWABanner()
 }
-```0
