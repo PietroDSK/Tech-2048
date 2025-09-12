@@ -14,6 +14,7 @@ import { applyI18n } from './i18n'
 import { showGameOver, ensureSettingsMenu, openSettingsMenu, closeSettingsMenu } from './ui'
 import { AdsManager } from './ads'
 import { isNative, initAdMob, showBannerBottom, hideBanner, maybeShowInterstitialEvery } from './native-ads'
+import { ensureWebConsent, reopenConsent } from './consent'
 
 // --- DOM refs ---
 const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -219,3 +220,7 @@ function ensurePWABanner() {
     if (!native) ensurePWABanner()
   }
 })()
+
+ensureWebConsent(lang, (consented) => {
+  if (consented) ads.initDesktopBanner()
+})
