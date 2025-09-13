@@ -1,0 +1,17 @@
+name: Bubblewrap Build
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i -g @bubblewrap/cli
+      - run: |
+          mkdir twa && cd twa
+          bubblewrap init --manifest=https://pietrodsk.github.io/Tech-2048/manifest.webmanifest --skipSigning
+          bubblewrap build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bubblewrap-apks
+          path: twa/app/build/outputs/**
