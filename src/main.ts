@@ -15,7 +15,6 @@ import { showGameOver, ensureSettingsMenu, openSettingsMenu, closeSettingsMenu }
 import { AdsManager } from './ads'
 import { isNative, initAdMob, showBannerBottom, hideBanner, maybeShowInterstitialEvery } from './native-ads'
 import { ensureWebConsent, reopenConsent } from './consent'
-
 // --- DOM refs ---
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const scoreEl = document.getElementById('score')!
@@ -80,8 +79,8 @@ menuLang?.addEventListener('change', () => {
 const ads = new AdsManager({
   // Troque para 'adsense' e preencha clientId/slot se quiser usar AdSense no web
   network: 'adsense', // 'none' | 'adsense' | 'custom'
-  // adsenseClientId: "ca-pub-8826867524630571",
-  // adsenseBannerSlotId: '2306720556',
+  adsenseClientId: "ca-pub-8826867524630571",
+  adsenseBannerSlotId: '2306720556',
   bannerHTML: `
     <a href="https://example.com" target="_blank" rel="noopener" class="ad-box" style="display:block;text-decoration:none">
       <div class="ad-placeholder">Seu banner 300×250</div>
@@ -224,3 +223,25 @@ function ensurePWABanner() {
 ensureWebConsent(lang, (consented) => {
   if (consented) ads.initDesktopBanner()
 })
+
+function wirePrivacyLink(currentLang: Lang) {
+  const btn = document.getElementById('privacyLink')
+  if (!btn) return
+  btn.addEventListener('click', (ev) => {
+    ev.preventDefault?.()
+    reopenConsent(currentLang)
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => wirePrivacyLink(lang))
+} else {
+  wirePrivacyLink(lang)
+}
+
+
+function onLanguageChanged(newLang: Lang) {
+  applyI18n(newLang)
+  wirePrivacyLink(newLang)
+}
+
