@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:web": "vite build",
+    "build:cap": "CAPACITOR=1 vite build",
+    "build:aab": "cd android && ./gradlew clean bundleRelease",
+    "build:apk": "cd android && ./gradlew clean assembleRelease",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@capacitor/android": "^7.4.3",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.3",
     "@capacitor/core": "^7.4.3",
+    "cordova-res": "^0.15.4",
     "typescript": "^5.5.4",
     "vite": "^5.4.0"
   },

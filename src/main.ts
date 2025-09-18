@@ -13,8 +13,11 @@ import { SFX } from './sfx'
 import { applyI18n } from './i18n'
 import { showGameOver, ensureSettingsMenu, openSettingsMenu, closeSettingsMenu } from './ui'
 import { AdsManager } from './ads'
-import { isNative, initAdMob, showBannerBottom, hideBanner, maybeShowInterstitialEvery } from './native-ads'
 import { ensureWebConsent, reopenConsent } from './consent'
+import { Capacitor } from '@capacitor/core'
+import { initAdMob, showBannerBottom, hideBanner, maybeShowInterstitialEvery } from './native-ads'
+
+
 // --- DOM refs ---
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const scoreEl = document.getElementById('score')!
@@ -96,7 +99,7 @@ const ads = new AdsManager({
 
 // Inicialização condicionada a plataforma
 ;(async () => {
-  if (await isNative()) {
+  if (Capacitor.isNativePlatform()) {
     // App Android (Capacitor): AdMob nativo
     await initAdMob()
     await showBannerBottom() // banner nativo no rodapé
@@ -108,8 +111,8 @@ const ads = new AdsManager({
 
 // --- Novo jogo (do menu) com interstitial por plataforma ---
 menuNew?.addEventListener('click', async () => {
-  if (await isNative()) {
-    await maybeShowInterstitialEvery(3) // a cada 3 partidas no Android (AdMob nativo)
+  if (Capacitor.isNativePlatform()) {
+    // await maybeShowInterstitialEvery(3) // a cada 3 partidas no Android (AdMob nativo)
   } else {
     await ads.maybeShowMobileInterstitial() // web/mobile
   }
@@ -120,8 +123,8 @@ menuNew?.addEventListener('click', async () => {
 
 // --- Controles extras (se existir botão "Novo jogo" fora do menu) ---
 btnNew?.addEventListener('click', async () => {
-  if (await isNative()) {
-    await maybeShowInterstitialEvery(3)
+  if (Capacitor.isNativePlatform()) {
+    // await maybeShowInterstitialEvery(3)
   } else {
     await ads.maybeShowMobileInterstitial()
   }
@@ -163,8 +166,8 @@ function checkEnd() {
       showGameOver(lang, (game as any).score).then(async res => {
         clearGameState()
         if (res === 'new') {
-          if (await isNative()) {
-            await maybeShowInterstitialEvery(3)
+          if (Capacitor.isNativePlatform()) {
+            // await maybeShowInterstitialEvery(3)
           } else {
             await ads.maybeShowMobileInterstitial()
           }
@@ -203,7 +206,7 @@ function ensurePWABanner() {
 }
 
 ;(async () => {
-  const native = await isNative()
+  const native = Capacitor.isNativePlatform()
   if ('serviceWorker' in navigator) {
     if (!native && isProd && !inIframe()) {
       try { await navigator.serviceWorker.register('sw.js') } catch (err) { console.warn('SW register failed:', err) }
@@ -238,7 +241,6 @@ if (document.readyState === 'loading') {
 } else {
   wirePrivacyLink(lang)
 }
-
 
 function onLanguageChanged(newLang: Lang) {
   applyI18n(newLang)

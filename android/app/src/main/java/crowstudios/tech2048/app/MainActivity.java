@@ -1,4 +1,4 @@
-package com.crowstudios.tech2048;
+package crowstudios.tech2048.app;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -1,10 +1,17 @@
 apply plugin: 'com.android.application'
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace "com.crowstudios.tech2048"
+    namespace "crowstudios.tech2048.app"
     compileSdk rootProject.ext.compileSdkVersion
+
     defaultConfig {
-        applicationId "com.crowstudios.tech2048"
+        applicationId "crowstudios.tech2048.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -16,12 +23,29 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
+    signingConfigs {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            storeFile file(keystoreProperties["SIGNING_KEY_PATH"])
+            storePassword keystoreProperties["SIGNING_STORE_PASSWORD"]
+            keyAlias keystoreProperties["SIGNING_KEY_ALIAS"]
+            keyPassword keystoreProperties["SIGNING_KEY_PASSWORD"]
         }
     }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false        // opcional: ativa R8
+            shrinkResources false      // opcional
+        }
+        debug {
+            // debug usa a debug.keystore automática
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
 }
 
 repositories {

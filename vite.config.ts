@@ -1,2 +1,10 @@
 import { defineConfig } from 'vite'
-export default defineConfig({ base:'./', server:{port:5173}, build:{target:'es2020'} })
+import path from 'path'
+
+const isCap = process.env.CAPACITOR === '1'
+
+export default defineConfig({
+  base: isCap ? './' : '/Tech-2048/',
+  build: { outDir: 'dist' },
+  resolve: { alias: { '@': path.resolve(__dirname, 'src') } }
+})
