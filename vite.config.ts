@@ -1,10 +1,13 @@
-import { defineConfig } from 'vite'
-import path from 'path'
+import { defineConfig } from "vite";
+import path from "path";
 
-const isCap = process.env.CAPACITOR === '1'
+const isCap = process.env.CAPACITOR === "1";
 
 export default defineConfig({
-  base: isCap ? './' : '/Tech-2048/',
-  build: { outDir: 'dist' },
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } }
-})
+  optimizeDeps: {
+    exclude: ["@capacitor/core", "@capacitor-community/admob"],
+  },
+  base: "",
+  build: { outDir: "dist" },
+  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+});

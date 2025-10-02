@@ -1,129 +1,118 @@
 // src/scenes/OptionsScene.ts
 import Phaser from "phaser";
-import { theme } from "../theme";
-import { t } from "../i18n";
+import { getTheme } from "../theme";
 import { getSettings, saveSettings, resetProgress } from "../storage";
+import { enterWithSwap, swapTo } from "../animations/transitions";
+import { UIButton, mapThemeToButtonTheme } from "../ui/Button";
+import { BackButton } from "../ui/BackButton";
 
 export default class OptionsScene extends Phaser.Scene {
-  private settings = getSettings();
+  constructor() { super("OptionsScene"); }
 
-  constructor() {
-    super("OptionsScene");
-  }
-
-  create() {
+  create(data: any) {
+    const theme = getTheme();
+    const uiTheme = mapThemeToButtonTheme(theme.colors);
     const { width, height } = this.scale;
-    this.cameras.main.setBackgroundColor(theme.bg);
+
+    this.cameras.main.setBackgroundColor(theme.colors.bg);
+    enterWithSwap(this, data);
+
+    new BackButton(this, 50, 26, "Menu");
 
     const halo = this.add.graphics();
-    halo.fillStyle(Phaser.Display.Color.HexStringToColor(theme.stroke).color, 0.12);
-    halo.fillRoundedRect(width * 0.08, height * 0.12, width * 0.84, height * 0.76, 24);
+    halo.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.glow).color, 0.22);
+    halo.fillRoundedRect(width * 0.06, height * 0.08, width * 0.88, height * 0.84, 24);
 
-    const title = this.add.text(width / 2, height * 0.18, t("optionsTitle"), {
+    const title = this.add.text(width/2, height*0.14, "Opções", {
       fontFamily: "Arial, Helvetica, sans-serif",
       fontSize: "36px",
-      color: theme.hudTitle,
-      fontStyle: "bold",
+      color: theme.colors.text,
+      fontStyle: "bold"
     }).setOrigin(0.5);
-    title.setShadow(0, 0, theme.stroke, 16, true, true);
 
     const panel = this.add.graphics();
-    const pw = width * 0.84, ph = height * 0.58;
-    const px = (width - pw) / 2, py = height * 0.24;
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor(theme.panel).color, 1);
+    const pw = width * 0.84, ph = height * 0.64;
+    const px = (width - pw) / 2, py = height * 0.20;
+    panel.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.surface).color, 1);
     panel.fillRoundedRect(px, py, pw, ph, 18);
-    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.stroke).color, 0.28);
+    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.colors.primary).color, 0.28);
     panel.strokeRoundedRect(px, py, pw, ph, 18);
 
-    let y = py + 90;
+    const s = getSettings();
 
-    // toggles
-    this.mkToggle(width/2, y, t("sound"), this.settings.sound, (v) => { this.settings.sound = v; this.persist(); });
-    y += 70;
-
-    this.mkToggle(width/2, y, t("animations"), this.settings.animations, (v) => { this.settings.animations = v; this.persist(); });
-    y += 70;
-
-    this.mkLang(width/2, y);
-    y += 100;
-
-    // reset progresso
-    const resetBtn = this.add.text(width/2, y, t("resetProgress"), {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "20px",
-      color: theme.tileTextDark,
-      backgroundColor: theme.hudTitle,
-      padding: { left: 22, right: 22, top: 12, bottom: 12 },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    resetBtn.setShadow(0, 0, theme.stroke, 8, true, true);
-
-    resetBtn.on("pointerover", () => resetBtn.setStyle({ backgroundColor: theme.stroke }));
-    resetBtn.on("pointerout",  () => resetBtn.setStyle({ backgroundColor: theme.hudTitle }));
-    resetBtn.on("pointerdown", () => {
-      this.tweens.add({ targets: resetBtn, scale: 0.97, duration: 70, yoyo: true });
-      resetProgress();
-      alert(t("progressCleared"));
-    });
-
-    // voltar
-    const back = this.add.text(width / 2, py + ph + 36, t("back"), {
+    // linha 1 — Som
+    this.add.text(px + 28, py + ph*0.22, "Som", {
       fontFamily: "Arial, Helvetica, sans-serif",
       fontSize: "18px",
-      color: theme.hudSub,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    back.on("pointerover", () => back.setColor(theme.hudTitle));
-    back.on("pointerout",  () => back.setColor(theme.hudSub));
-    back.on("pointerdown", () => this.scene.start("MenuScene"));
-  }
-
-  private mkToggle(x: number, y: number, label: string, value: boolean, onChange:(v:boolean)=>void) {
-    const text = this.add.text(x, y, `${label}: ${value ? "ON" : "OFF"}`, {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "22px",
-      color: theme.tileTextLight,
-      backgroundColor: "#00000000",
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    text.on("pointerover", () => text.setColor(theme.hudTitle));
-    text.on("pointerout",  () => text.setColor(theme.tileTextLight));
-    text.on("pointerdown", () => {
-      value = !value;
-      text.setText(`${label}: ${value ? "ON" : "OFF"}`);
-      this.tweens.add({ targets: text, scale: 1.06, duration: 60, yoyo: true });
-      onChange(value);
+      color: theme.colors.textDim
     });
-  }
 
-  private mkLang(x:number, y:number) {
-    this.add.text(x, y, t("language"), {
+    const btnSound = new UIButton(this, {
+      x: px + pw - 120, y: py + ph*0.22,
+      label: s.sound ? "Ligado" : "Desligado",
+      variant: s.sound ? "primary" : "secondary",
+      size: "md",
+      theme: uiTheme,
+      onClick: () => {
+        const cur = getSettings();
+        const next = { ...cur, sound: !cur.sound };
+        saveSettings(next);
+        btnSound.setLabel(next.sound ? "Ligado" : "Desligado");
+        btnSound.setVariant(next.sound ? "primary" : "secondary");
+      }
+    });
+
+    // linha 2 — Animações
+    this.add.text(px + 28, py + ph*0.38, "Animações", {
       fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "22px",
-      color: theme.tileTextLight,
-    }).setOrigin(0.5);
+      fontSize: "18px",
+      color: theme.colors.textDim
+    });
 
-    const pt = this.add.text(x - 110, y + 42, t("portuguese"), {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "20px",
-      color: this.settings.lang === "pt" ? theme.hudTitle : theme.tileTextLight,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const btnAnim = new UIButton(this, {
+      x: px + pw - 120, y: py + ph*0.38,
+      label: s.animations ? "Ligadas" : "Desligadas",
+      variant: s.animations ? "primary" : "secondary",
+      size: "md",
+      theme: uiTheme,
+      onClick: () => {
+        const cur = getSettings();
+        const next = { ...cur, animations: !cur.animations };
+        saveSettings(next);
+        btnAnim.setLabel(next.animations ? "Ligadas" : "Desligadas");
+        btnAnim.setVariant(next.animations ? "primary" : "secondary");
+      }
+    });
 
-    const en = this.add.text(x + 110, y + 42, t("english"), {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "20px",
-      color: this.settings.lang === "en" ? theme.hudTitle : theme.tileTextLight,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    // linha 3 — Reset progresso
+    const btnReset = new UIButton(this, {
+      x: width/2, y: py + ph*0.62,
+      label: "Redefinir Progresso",
+      variant: "danger", size: "md",
+      theme: uiTheme,
+      onClick: () => {
+        if (confirm("Tem certeza que deseja apagar o progresso?")) {
+          resetProgress();
+          alert("Progresso apagado.");
+        }
+      }
+    });
 
-    pt.on("pointerover", () => pt.setColor(theme.hudTitle));
-    pt.on("pointerout",  () => pt.setColor(this.settings.lang === "pt" ? theme.hudTitle : theme.tileTextLight));
-    en.on("pointerover", () => en.setColor(theme.hudTitle));
-    en.on("pointerout",  () => en.setColor(this.settings.lang === "en" ? theme.hudTitle : theme.tileTextLight));
+    // linha 4 — Voltar / Menu
+    const btnMenu = new UIButton(this, {
+      x: width/2, y: py + ph*0.82,
+      label: "Menu",
+      variant: "ghost", size: "lg",
+      theme: uiTheme,
+      onClick: () => swapTo(this, "MenuScene", {}, "left")
+    });
 
-    pt.on("pointerdown", () => { this.settings.lang = "pt"; this.persist(); this.scene.start("OptionsScene"); });
-    en.on("pointerdown", () => { this.settings.lang = "en"; this.persist(); this.scene.start("OptionsScene"); });
-  }
+    // entrada suave
+    [title, panel, btnSound, btnAnim, btnReset, btnMenu].forEach((o, i) => {
+      (o as any).alpha = 0; (o as any).y += 16;
+      this.tweens.add({ targets: o, alpha: 1, y: (o as any).y - 16, duration: 220, ease: "Cubic.Out", delay: i*40 });
+    });
 
-  private persist() {
-    saveSettings(this.settings);
+    this.tweens.add({ targets: halo, alpha: { from: 0.18, to: 0.28 }, duration: 1500, ease: "sine.inOut", yoyo: true, repeat: -1 });
   }
 }

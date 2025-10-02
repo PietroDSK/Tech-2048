@@ -31,6 +31,7 @@ export type Settings = {
   sound: boolean;
   lang: "pt" | "en";
   animations: boolean;
+  themeKey: string;
 };
 
 export function hasUnlocked2048(): boolean {
@@ -62,9 +63,10 @@ export function getSettings(): Settings {
       sound: !!parsed.sound,
       lang: parsed.lang === "en" ? "en" : "pt",
       animations: parsed.animations !== false,
+      themeKey: typeof parsed.themeKey === "string" ? parsed.themeKey : "neon-pcb",
     };
   } catch {
-    return { sound: true, lang: "pt", animations: true };
+    return { sound: true, lang: "pt", animations: true, themeKey: "neon-pcb" };
   }
 }
 

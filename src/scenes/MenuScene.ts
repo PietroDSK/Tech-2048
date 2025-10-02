@@ -1,94 +1,91 @@
 // src/scenes/MenuScene.ts
 import Phaser from "phaser";
-import { theme } from "../theme";
+import { getTheme } from "../theme/index";
 import { t } from "../i18n";
+import { enterWithSwap, swapTo } from "../animations/transitions";
+import { UIButton, mapThemeToButtonTheme } from "../ui/Button";
 
 export default class MenuScene extends Phaser.Scene {
-  constructor() {
-    super("MenuScene");
-  }
+  constructor() { super("MenuScene"); }
 
-  create() {
+  create(data: any) {
+    const theme = getTheme();
+    const uiTheme = mapThemeToButtonTheme(theme.colors);
     const { width, height } = this.scale;
-    this.cameras.main.setBackgroundColor(theme.bg);
+    this.cameras.main.setBackgroundColor(theme.colors.bg);
+    enterWithSwap(this, data);
 
-    // Halo de fundo
     const halo = this.add.graphics();
-    halo.fillStyle(Phaser.Display.Color.HexStringToColor(theme.stroke).color, 0.12);
+    halo.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.glow).color, 0.22);
     halo.fillRoundedRect(width * 0.08, height * 0.12, width * 0.84, height * 0.76, 24);
 
-    // Título
     const title = this.add.text(width / 2, height * 0.20, "TECH-2048", {
       fontFamily: "Arial, Helvetica, sans-serif",
       fontSize: "44px",
-      color: theme.hudTitle,
+      color: theme.colors.text,
       fontStyle: "bold",
       align: "center",
-    }).setOrigin(0.5);
-    title.setShadow(0, 0, theme.stroke, 18, true, true);
+    }).setOrigin(0.5).setDepth(5);
+    title.setShadow(0, 0, theme.colors.glow, 18, true, true);
 
-    // Sub
     this.add.text(width / 2, height * 0.26, t("title"), {
       fontFamily: "Arial, Helvetica, sans-serif",
       fontSize: "18px",
-      color: theme.hudSub,
-    }).setOrigin(0.5).setAlpha(0.95);
+      color: theme.colors.textDim,
+    }).setOrigin(0.5).setAlpha(0.95).setDepth(5);
 
-    // Painel central
-    const panel = this.add.graphics();
-    const pw = width * 0.84, ph = height * 0.52;
+    const panel = this.add.graphics().setDepth(4);
+    const pw = width * 0.84, ph = height * 0.56;
     const px = (width - pw) / 2, py = height * 0.30;
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor(theme.panel).color, 1);
+    panel.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.surface).color, 1);
     panel.fillRoundedRect(px, py, pw, ph, 18);
-    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.stroke).color, 0.28);
+    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.colors.primary).color, 0.28);
     panel.strokeRoundedRect(px, py, pw, ph, 18);
 
-    // Botões
-    const makeBtn = (y: number, label: string, onClick: () => void) => {
-      const btn = this.add.text(width / 2, y, label, {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "26px",
-        color: theme.tileTextDark,
-        backgroundColor: theme.hudTitle,
-        padding: { left: 28, right: 28, top: 14, bottom: 14 },
-      })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
+    const y1 = py + ph * 0.22;
+    const y2 = py + ph * 0.44;
+    const y3 = py + ph * 0.66;
+    const y4 = py + ph * 0.88;
 
-      btn.setShadow(0, 0, theme.stroke, 10, true, true);
+    const btnClassic = new UIButton(this, {
+      x: width/2, y: y1, label: t("playClassic"),
+      variant: "primary", size: "lg", theme: uiTheme,
+      onClick: () => swapTo(this, "GameScene", { mode: "classic" }, "right")
+    });
+    const btnOther = new UIButton(this, {
+      x: width/2, y: y2, label: t("otherModes"),
+      variant: "secondary", size: "lg", theme: uiTheme,
+      onClick: () => swapTo(this, "ModesScene", {}, "right")
+    });
+    const btnThemes = new UIButton(this, {
+      x: width/2, y: y3, label: "Temas",
+      variant: "secondary", size: "lg", theme: uiTheme,
+      onClick: () => swapTo(this, "ThemeScene", {}, "right")
+    });
+    const btnOptions = new UIButton(this, {
+      x: width/2, y: y4, label: t("options"),
+      variant: "ghost", size: "lg", theme: uiTheme,
+      onClick: () => swapTo(this, "OptionsScene", {}, "right")
+    });
 
-      btn.on("pointerover", () =>
-        btn.setStyle({ backgroundColor: theme.stroke })
-      );
-      btn.on("pointerout", () =>
-        btn.setStyle({ backgroundColor: theme.hudTitle })
-      );
-      btn.on("pointerdown", () => {
-        this.tweens.add({ targets: btn, scale: 0.96, duration: 70, yoyo: true });
-        onClick();
-      });
-      return btn;
-    };
-
-    makeBtn(py + ph * 0.25, t("playClassic"), () => this.scene.start("GameScene", { mode: "classic" }));
-    makeBtn(py + ph * 0.45, t("otherModes"), () => this.scene.start("ModesScene"));
-    makeBtn(py + ph * 0.65, t("options"), () => this.scene.start("OptionsScene"));
-
-    // “Sair”
-    const exit = this.add.text(width / 2, py + ph + 40, t("exit"), {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "18px",
-      color: theme.hudSub,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    exit.on("pointerover", () => exit.setColor(theme.hudTitle));
-    exit.on("pointerout", () => exit.setColor(theme.hudSub));
-    exit.on("pointerdown", () => {
-      const ok = confirm(t("confirmExit"));
-      if (ok) {
-        try { (window as any).close?.(); } catch {}
-        this.game.destroy(true);
+    const exit = new UIButton(this, {
+      x: width/2, y: py + ph + 50, label: t("exit"),
+      variant: "ghost", size: "md", theme: uiTheme,
+      onClick: () => {
+        const ok = confirm(t("confirmExit"));
+        if (ok) { try { (window as any).close?.(); } catch {} this.game.destroy(true); }
       }
     });
+    exit.setDepth(5);
+
+    // animação de entrada
+    const items = [btnClassic, btnOther, btnThemes, btnOptions, exit];
+    [title, panel, ...items].forEach((o, i) => {
+      o.setAlpha(0); (o as any).y += 16;
+      this.tweens.add({ targets: o, alpha: 1, y: (o as any).y - 16, duration: 260, ease: "Cubic.Out", delay: i * 40 });
+    });
+
+    // halo pulso sutil
+    this.tweens.add({ targets: halo, alpha: { from: 0.18, to: 0.28 }, duration: 1500, ease: "sine.inOut", yoyo: true, repeat: -1 });
   }
 }

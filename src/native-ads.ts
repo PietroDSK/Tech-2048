@@ -19,7 +19,7 @@ export function isNative(): boolean {
 export async function initAdMob() {
   if (!isNative()) return
   // Em produção: coloque initializeForTesting: false
-  await AdMob.initialize({ initializeForTesting: true })
+  await AdMob.initialize({ initializeForTesting: false })
   // (sem setRequestConfiguration aqui)
 }
 

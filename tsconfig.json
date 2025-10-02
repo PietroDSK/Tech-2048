@@ -12,7 +12,9 @@
     "strict": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": [],
+    "skipDefaultLibCheck": true
   },
   "include": [
     "src"
