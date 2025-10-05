@@ -9,7 +9,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 
 // Use um ID de teste do Google no dev. Troque no release.
-const TEST_BANNER = 'ca-app-pub-3940256099942544/6300978111';
+const TEST_BANNER = 'ca-app-pub-8826867524630571/6669912483';
 
 let isShowing = false;
 

@@ -1,251 +1,181 @@
 // src/ui/Button.ts
 import Phaser from "phaser";
+import { getTheme } from "../theme";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md" | "lg";
+export type UIButtonVariant = "primary" | "secondary" | "ghost";
+export type UIButtonSize = "sm" | "md" | "lg";
 
-export interface ButtonColors {
+export type UIButtonTheme = {
   bg: string;
-  fg: string;
-  hoverBg?: string;
-  border?: string;
-  glow?: string;
+  bgHover: string;
+  text: string;
+  stroke: string;
+  ghostText: string;
+  ghostStroke: string;
+};
+
+export function mapThemeToButtonTheme(c = getTheme().colors): UIButtonTheme {
+  return {
+    bg: c.surfaceAlt,
+    bgHover: c.gridHighlight,
+    text: c.text,
+    stroke: c.primary,
+    ghostText: c.text,
+    ghostStroke: c.gridHighlight,
+  };
 }
-export interface ButtonTheme {
-  primary: ButtonColors;
-  secondary: ButtonColors;
-  ghost: ButtonColors;
-  danger: ButtonColors;
-}
-export interface ButtonOpts {
+
+type UIButtonConfig = {
   x: number;
   y: number;
   label: string;
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  width?: number;
+  variant?: UIButtonVariant;
+  size?: UIButtonSize;
+  theme?: UIButtonTheme;
+  width?: number; // largura mínima
   onClick?: () => void;
-  theme: ButtonTheme;
-}
-
-const SIZE_MAP = {
-  sm: { font: 14, padX: 14, padY: 8, height: 32, radius: 8 },
-  md: { font: 18, padX: 20, padY: 10, height: 40, radius: 10 },
-  lg: { font: 26, padX: 28, padY: 14, height: 52, radius: 12 },
 };
 
 export class UIButton extends Phaser.GameObjects.Container {
-  private bg: Phaser.GameObjects.Rectangle;
-  private label: Phaser.GameObjects.Text;
-  private _variant: ButtonVariant;
-  private _size: ButtonSize;
-  private colors: ButtonColors;
-  private opts: ButtonOpts;
+  private bg!: Phaser.GameObjects.Graphics;
+  private lbl!: Phaser.GameObjects.Text;
   private _enabled = true;
-  private _loading = false;
-  private _width?: number;
+  private _variant: UIButtonVariant;
+  private _size: UIButtonSize;
+  private _minWidth: number;
+  private colors: UIButtonTheme;
 
-  constructor(scene: Phaser.Scene, opts: ButtonOpts) {
-    super(scene, opts.x, opts.y);
-    this.opts = opts;
-    this._variant = opts.variant ?? "primary";
-    this._size = opts.size ?? "md";
-    this._width = opts.width;
+  // guardo dimensões para hitbox/redraw
+  private _w = 220;
+  private _h = 44;
+  private _radius = 18;
 
-    const size = SIZE_MAP[this._size];
-    this.colors = this.pickColors();
-
-    const bgColor = Phaser.Display.Color.HexStringToColor(this.colors.bg).color;
-    const borderColor = this.colors.border
-      ? Phaser.Display.Color.HexStringToColor(this.colors.border).color
-      : bgColor;
-
-    this.bg = scene.add
-      .rectangle(0, 0, 10, size.height, bgColor, 1)
-      .setOrigin(0.5); // apenas origem central
-    if (this.colors.border) {
-      this.bg.setStrokeStyle(1, borderColor, 0.7);
-    }
-
-    this.label = scene.add
-      .text(0, 0, opts.label, {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: `${size.font}px`,
-        color: this.colors.fg,
-        fontStyle: "bold",
-        align: "center",
-      })
-      .setOrigin(0.5);
-
-    this.add([this.bg, this.label]);
+  constructor(scene: Phaser.Scene, cfg: UIButtonConfig) {
+    super(scene, cfg.x, cfg.y);
     scene.add.existing(this);
 
-    this.relayout();
-    this.makeInteractive();
+    this._variant = cfg.variant ?? "primary";
+    this._size = cfg.size ?? "md";
+    this._minWidth = cfg.width ?? 220;
+    this.colors = cfg.theme ?? mapThemeToButtonTheme();
 
-    this.on("pointerover", () => this.hover(true));
-    this.on("pointerout", () => this.hover(false));
-    this.on("pointerdown", () => this.press(true));
-    this.on("pointerup", () => {
-      this.press(false);
-      if (this._enabled && !this._loading) this.opts.onClick?.();
-    });
+    const { w, h, fontSize, radius } = this.measure();
+    this._w = w; this._h = h; this._radius = radius;
 
-    this.setDepth(900);
-    this.setScrollFactor(0);
-  }
+    this.bg = scene.add.graphics();
+    this.add(this.bg);
+    this.redrawRounded(this.bg);
 
-  private pickColors(): ButtonColors {
-    const t = this.opts.theme;
-    return this._variant === "primary"
-      ? t.primary
-      : this._variant === "secondary"
-      ? t.secondary
-      : this._variant === "danger"
-      ? t.danger
-      : t.ghost;
-  }
+    this.lbl = scene.add
+      .text(0, 0, cfg.label, {
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: `${fontSize}px`,
+        fontStyle: "bold",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5);
+    this.add(this.lbl);
 
-  private makeInteractive() {
-    const w = this.bg.width;
-    const h = this.bg.height;
+    this.setLabel(cfg.label);
+    this.applyVariantColors();
+
+    // área clicável 100% do retângulo
+    this.setSize(this._w, this._h);
     this.setInteractive(
-      new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h),
+      new Phaser.Geom.Rectangle(-this._w / 2, -this._h / 2, this._w, this._h),
       Phaser.Geom.Rectangle.Contains,
+    ).setScrollFactor(0).setDepth(5);
+
+    this.on("pointerover", () => {
+      if (!this._enabled) return;
+      const fill =
+        this._variant === "ghost" ? this.colors.ghostStroke : this.colors.bgHover;
+      this.redrawRounded(this.bg, fill);
+      this.setScale(1.02);
+    });
+    this.on("pointerout", () => {
+      if (!this._enabled) return;
+      this.applyVariantColors();
+      this.setScale(1);
+    });
+    this.on("pointerdown", () => {
+      if (!this._enabled) return;
+      scene.tweens.add({ targets: this, scale: 0.97, duration: 60, ease: "sine.out" });
+    });
+    this.on("pointerup", () => {
+      if (!this._enabled) return;
+      scene.tweens.add({ targets: this, scale: 1.0, duration: 80, ease: "back.out(2.2)" });
+      cfg.onClick?.();
+    });
+  }
+
+  private measure() {
+    const sizes: Record<UIButtonSize, { h: number; font: number; radius: number }> = {
+      sm: { h: 34, font: 14, radius: 14 },
+      md: { h: 44, font: 18, radius: 18 },
+      lg: { h: 56, font: 22, radius: 22 },
+    };
+    const s = sizes[this._size];
+    return { w: this._minWidth, h: s.h, fontSize: s.font, radius: s.radius };
+  }
+
+  private redrawRounded(g: Phaser.GameObjects.Graphics, fillHex?: string) {
+    const strokeHex =
+      this._variant === "ghost" ? this.colors.ghostStroke : this.colors.stroke;
+    const fill =
+      this._variant === "ghost"
+        ? 0x000000
+        : Phaser.Display.Color.HexStringToColor(fillHex ?? this.colors.bg).color;
+
+    g.clear();
+    g.fillStyle(fill, this._variant === "ghost" ? 0 : 1);
+    g.fillRoundedRect(-this._w / 2, -this._h / 2, this._w, this._h, this._radius);
+    g.lineStyle(
+      2,
+      Phaser.Display.Color.HexStringToColor(strokeHex).color,
+      1,
     );
+    g.strokeRoundedRect(-this._w / 2, -this._h / 2, this._w, this._h, this._radius);
+
+    const c = getTheme().colors;
+    this.lbl?.setColor(this._variant === "ghost" ? c.text : this.colors.text);
   }
 
-  private relayout() {
-    const size = SIZE_MAP[this._size];
-    const textW = Math.ceil(this.label.width || this.label.getBounds().width);
-    const w = Math.max(this._width ?? 0, textW + size.padX * 2, 64);
-
-    this.bg.setSize(w, size.height);
-    this.bg.setOrigin(0.5); // sempre centralizado no container
-    this.bg.x = 0;
-    this.bg.y = 0;
-
-    this.label.setOrigin(0.5);
-    this.label.x = 0;
-    this.label.y = 0;
-
-    if (this.colors.glow) {
-      this.label.setShadow(0, 0, this.colors.glow, 10, true, true);
-    }
-
-    this.removeInteractive();
-    this.makeInteractive();
+  private applyVariantColors() {
+    this.redrawRounded(this.bg);
   }
 
-  private hover(on: boolean) {
-    if (!this._enabled || this._loading) return;
-    const to = Phaser.Display.Color.HexStringToColor(
-      on ? this.colors.hoverBg ?? this.colors.bg : this.colors.bg,
-    ).color;
-    this.scene.tweens.add({
-      targets: this.bg,
-      fillColor: to,
-      duration: 100,
-      ease: "sine.out",
-    });
-    this.scene.tweens.add({
-      targets: this,
-      scale: on ? 1.03 : 1,
-      duration: 100,
-      ease: "sine.out",
-    });
-  }
-
-  private press(on: boolean) {
-    if (!this._enabled || this._loading) return;
-    this.scene.tweens.add({
-      targets: this,
-      scale: on ? 0.98 : 1.0,
-      duration: 80,
-      ease: "sine.out",
-    });
-  }
-
-  // --- API pública ---
   setEnabled(v: boolean) {
     this._enabled = v;
-    this.alpha = v ? 1 : 0.6;
+    const alpha = v ? 1 : 0.5;
+    this.setAlpha(alpha);
     this.disableInteractive();
-    if (v) this.makeInteractive();
-  }
-
-  setLoading(v: boolean) {
-    this._loading = v;
-    this.label.setText(v ? "..." : this.opts.label);
-    this.alpha = v ? 0.8 : 1;
-    this.relayout();
-  }
-
-  setVariant(variant: ButtonVariant) {
-    this._variant = variant;
-    this.colors = this.pickColors();
-    this.bg.fillColor = Phaser.Display.Color.HexStringToColor(
-      this.colors.bg,
-    ).color;
-    this.label.setColor(this.colors.fg);
-  }
-
-  /** Renomeado para evitar conflito com Container.setSize(width, height) */
-  setButtonSize(size: ButtonSize) {
-    this._size = size;
-    const s = SIZE_MAP[size];
-    this.label.setFontSize(s.font);
-    this.relayout();
-  }
-
-  setWidth(w?: number) {
-    this._width = w;
-    this.relayout();
+    if (v)
+      this.setInteractive(
+        new Phaser.Geom.Rectangle(-this._w / 2, -this._h / 2, this._w, this._h),
+        Phaser.Geom.Rectangle.Contains,
+      );
   }
 
   setLabel(text: string) {
-    this.opts.label = text;
-    this.label.setText(text);
-    this.relayout();
+    this.lbl.setText(text);
   }
-}
 
-// mapeamento de tema -> cores dos botões
-export function mapThemeToButtonTheme(themeColors: {
-  primary: string;
-  secondary: string;
-  text: string;
-  textDim: string;
-  bg: string;
-  glow?: string;
-  surface?: string;
-}): ButtonTheme {
-  return {
-    primary: {
-      bg: themeColors.primary,
-      fg: themeColors.bg,
-      hoverBg: themeColors.secondary,
-      glow: themeColors.glow,
-    },
-    secondary: {
-      bg: themeColors.surface ?? "#2a2a2a",
-      fg: themeColors.text,
-      hoverBg: themeColors.primary,
-      border: themeColors.primary,
-      glow: themeColors.glow,
-    },
-    ghost: {
-      bg: "#00000000",
-      fg: themeColors.text,
-      hoverBg: "#ffffff18",
-      border: themeColors.textDim,
-      glow: themeColors.glow,
-    },
-    danger: {
-      bg: "#e8516b",
-      fg: "#0b0b0b",
-      hoverBg: "#ff6b85",
-      glow: themeColors.glow,
-    },
-  };
+  setTheme(theme: UIButtonTheme) {
+    this.colors = theme;
+    this.applyVariantColors();
+  }
+
+  setMinWidth(w: number) {
+    this._minWidth = w;
+    const { h, radius } = this.measure();
+    this._w = w; this._h = h; this._radius = radius;
+    this.setSize(this._w, this._h);
+    this.redrawRounded(this.bg);
+    // atualiza hitarea
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(-this._w / 2, -this._h / 2, this._w, this._h),
+      Phaser.Geom.Rectangle.Contains,
+    );
+  }
 }

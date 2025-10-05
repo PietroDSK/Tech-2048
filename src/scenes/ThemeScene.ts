@@ -1,283 +1,178 @@
 // src/scenes/ThemeScene.ts
 import Phaser from "phaser";
-import { getTheme, themes, setThemeKey, getTileColorForKey } from "../theme";
+import {
+  getTheme,
+  themes,
+  ThemeKey,
+  setThemeKey,
+  getTileColorForKey,
+} from "../theme";
+import { t } from "../i18n";
+import { UIButton, mapThemeToButtonTheme } from "../ui/Button";
+import { MenuIcon } from "../ui/MenuIcon";
 import { hasUnlocked2048 } from "../storage";
-import { enterWithSwap } from "../animations/transitions";
-import { BackButton } from "../ui/BackButton";
-
-type ThemeKey = keyof typeof themes;
 
 export default class ThemeScene extends Phaser.Scene {
-  constructor() { super("ThemeScene"); }
+  constructor() {
+    super("ThemeScene");
+  }
 
-  create(data:any) {
-    const activeTheme = getTheme();
-    const { width, height } = this.scale;
+  create() {
+    const c = getTheme().colors;
+    const { width } = this.scale;
+    this.cameras.main.setBackgroundColor(c.bg);
+
+    // menu topo direito
+    new MenuIcon(this, width - 30, 30);
+
+    const title = this.add
+      .text(24, 40, t("themes"), {
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "28px",
+        color: c.text,
+      })
+      .setOrigin(0, 0.5);
+    title.setShadow(0, 0, c.glow, 14, true, true);
+
+    const keys = Object.keys(themes) as ThemeKey[];
+    const cardW = Math.min(300, width * 0.84);
+    const cardH = 160;
+
+    // trava: somente neon-pcb liberado até 2048
     const unlocked = hasUnlocked2048();
+    const alwaysFreeKey: ThemeKey = "neon-pcb" as ThemeKey;
 
-    this.cameras.main.setBackgroundColor(activeTheme.colors.bg);
-    enterWithSwap(this, data);
+    let y = 130;
 
-    new BackButton(this, 50, 26, "Menu");
+    keys.forEach((key) => {
+      const theme = themes[key];
+      const cardX = width / 2;
 
-    // Halo / título
-    const halo = this.add.graphics();
-    halo.fillStyle(Phaser.Display.Color.HexStringToColor(activeTheme.colors.glow).color, 0.22);
-    halo.fillRoundedRect(width * 0.06, height * 0.08, width * 0.88, height * 0.84, 24);
-
-    const title = this.add.text(width / 2, height * 0.12, "Temas", {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "38px",
-      color: activeTheme.colors.text,
-      fontStyle: "bold",
-    }).setOrigin(0.5);
-    title.setShadow(0, 0, activeTheme.colors.glow, 16, true, true);
-
-    // Painel (viewport da lista)
-    const pw = Math.floor(width * 0.88);
-    const ph = Math.floor(height * 0.72);
-    const px = Math.floor((width - pw) / 2);
-    const py = Math.floor(height * 0.18);
-
-    const panel = this.add.graphics();
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor(activeTheme.colors.surface).color, 1);
-    panel.fillRoundedRect(px, py, pw, ph, 18);
-    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(activeTheme.colors.primary).color, 0.28);
-    panel.strokeRoundedRect(px, py, pw, ph, 18);
-
-    // Container da lista ANCORADO no canto do painel
-    const listContainer = this.add.container(px, py);
-
-    // Máscara geométrica (não adicionada à display list)
-    const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
-    maskGfx.fillStyle(0xffffff, 1).fillRoundedRect(px, py, pw, ph, 18);
-    const geoMask = maskGfx.createGeometryMask();
-    listContainer.setMask(geoMask);
-
-    // Grid de cards (coordenadas LOCAIS dentro do listContainer)
-    const colCount = width >= 700 ? 2 : 1;
-    const margin = 18;
-    const cardW = Math.floor((pw - margin * (colCount + 1)) / colCount);
-    const cardH = 260;
-
-    const entries = Object.values(themes);
-    entries.forEach((th, idx) => {
-      const col = idx % colCount;
-      const row = Math.floor(idx / colCount);
-      const localX = margin + col * (cardW + margin);
-      const localY = margin + row * (cardH + margin);
-      const card = this.drawThemeCard(localX, localY, cardW, cardH, th.key as ThemeKey, unlocked);
-      listContainer.add(card);
-
-      // animação de entrada
-      card.setAlpha(0);
-      card.y += 14;
-      this.tweens.add({
-        targets: card,
-        alpha: 1,
-        y: card.y - 14,
-        duration: 220,
-        ease: "Cubic.Out",
-        delay: 40 + idx * 30
-      });
-    });
-
-    // Scroll (move só o listContainer.y). Limites em coordenadas LOCAIS.
-    const totalRows = Math.ceil(entries.length / colCount);
-    const contentHeight = margin + totalRows * (cardH + margin);
-    const minY = Math.min(0, ph - contentHeight); // valor negativo se conteúdo > viewport
-    const maxY = 0;
-
-    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-    listContainer.y = py; // posição global inicial = py (mas como o container já está em px,py, usamos wheel para mover relativo)
-    // Ajuste: como o container já está em (px,py), o movimento deve atuar no 'container.y' RELATIVO ao topo da cena.
-    // Vamos armazenar um offset base e mover relativo a ele.
-    const baseY = py;
-
-    this.input.on("wheel", (_p: any, _g: any, _dx: number, dy: number) => {
-      if (contentHeight <= ph) return;
-      const rel = listContainer.y - baseY; // posição relativa (0 no topo)
-      const nextRel = clamp(rel - dy, minY, maxY);
-      listContainer.y = baseY + nextRel;
-    });
-
-    // Voltar (rodapé)
-    const back = this.add.text(width / 2, py + ph + 36, "Voltar", {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "18px",
-      color: activeTheme.colors.text,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    back.on("pointerdown", () => this.scene.start("OptionsScene"));
-  }
-
-  private drawThemeCard(
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    key: ThemeKey,
-    unlocked: boolean
-  ): Phaser.GameObjects.Container {
-    const activeTheme = getTheme(); // UI
-    const theme = themes[key];
-
-    const card = this.add.container(x, y);
-
-    // Card base (desenho em coordenadas LOCAIS do card)
-    const g = this.add.graphics();
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.surfaceAlt).color, 1);
-    g.fillRoundedRect(0, 0, w, h, 14);
-    g.lineStyle(
-      2,
-      Phaser.Display.Color.HexStringToColor(
-        key === activeTheme.key ? activeTheme.colors.secondary : activeTheme.colors.gridLine
-      ).color,
-      0.9
-    );
-    g.strokeRoundedRect(0, 0, w, h, 14);
-    card.add(g);
-
-    // Título
-    const title = this.add.text(16, 14, theme.name, {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "20px",
-      color: theme.colors.text,
-      fontStyle: key === activeTheme.key ? "bold" : "normal",
-    });
-    card.add(title);
-
-    // Badge "Atual"
-    if (key === activeTheme.key) {
-      const badge = this.add.text(w - 16, 16, "Atual", {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "14px",
-        color: activeTheme.colors.bg,
-        backgroundColor: activeTheme.colors.secondary,
-        padding: { left: 8, right: 8, top: 4, bottom: 4 },
-      }).setOrigin(1, 0);
-      badge.setShadow(0, 0, activeTheme.colors.glow, 8, true, true);
-      card.add(badge);
-    }
-
-    // Preview (mini tabuleiro) — container local
-    const pv = this.add.container(0, 0);
-    card.add(pv);
-    this.drawPreviewBoard(pv, theme.key, 16, 50, w - 32, 130);
-
-    // Botão
-    const canUse = this.isThemeAvailable(key, unlocked);
-    const btnLabel = canUse ? (key === activeTheme.key ? "Aplicado" : "Selecionar") : "Bloqueado (alcance 2048)";
-    const bgColor = canUse ? (key === activeTheme.key ? activeTheme.colors.gridHighlight : activeTheme.colors.primary) : "#3a405a";
-    const fgColor = canUse ? activeTheme.colors.bg : activeTheme.colors.text;
-
-    const btn = this.add.text(w / 2, h - 18, btnLabel, {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "16px",
-      color: fgColor,
-      backgroundColor: bgColor as any,
-      padding: { left: 14, right: 14, top: 8, bottom: 8 },
-    }).setOrigin(0.5);
-    card.add(btn);
-
-    if (canUse && key !== activeTheme.key) {
-      btn.setInteractive({ useHandCursor: true });
-      btn.on("pointerover", () => btn.setStyle({ backgroundColor: activeTheme.colors.secondary as any }));
-      btn.on("pointerout",  () => btn.setStyle({ backgroundColor: bgColor as any }));
-      btn.on("pointerdown", () => {
-        setThemeKey(key as string);
-        this.scene.start("ThemeScene"); // recarrega para refletir tema
-      });
-    } else if (!canUse) {
-      const lock = this.add.text(w - 16, h - 18, "🔒", {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "18px",
-        color: activeTheme.colors.warning,
-      }).setOrigin(1, 1);
-      card.add(lock);
-
-      // feedback ao clicar num tema bloqueado (wobble)
-      card.setInteractive(
-        new Phaser.Geom.Rectangle(0, 0, w, h),
-        Phaser.Geom.Rectangle.Contains
+      // glow atrás do card
+      const glow = this.add.graphics();
+      glow.fillStyle(
+        Phaser.Display.Color.HexStringToColor(theme.colors.glow).color,
+        0.18,
       );
-      card.on("pointerdown", () => {
-        this.tweens.add({
-          targets: card,
-          angle: { from: -3, to: 3 },
-          duration: 90,
-          ease: "sine.inOut",
-          yoyo: true,
-          repeat: 1,
-          onComplete: () => this.tweens.add({ targets: card, angle: 0, duration: 70, ease: "sine.out" })
-        });
-      });
-    }
+      glow.fillRoundedRect(
+        cardX - cardW / 2 - 6,
+        y - 6,
+        cardW + 12,
+        cardH + 12,
+        16,
+      );
 
-    return card;
-  }
+      // card
+      const card = this.add.graphics();
+      card.fillStyle(
+        Phaser.Display.Color.HexStringToColor(theme.colors.surfaceAlt).color,
+        1,
+      );
+      card.fillRoundedRect(cardX - cardW / 2, y, cardW, cardH, 14);
+      card.lineStyle(
+        2,
+        Phaser.Display.Color.HexStringToColor(theme.colors.gridHighlight).color,
+        1,
+      );
+      card.strokeRoundedRect(cardX - cardW / 2, y, cardW, cardH, 14);
 
-  private isThemeAvailable(key: ThemeKey, unlocked2048: boolean): boolean {
-    // "neon-pcb" liberado; demais só com 2048
-    return key === "neon-pcb" ? true : unlocked2048;
-  }
+      // título do tema
+      const titleText = this.add
+        .text(cardX - cardW / 2 + 14, y + 14, theme.name, {
+          fontFamily: "Arial, Helvetica, sans-serif",
+          fontSize: "16px",
+          color: theme.colors.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0, 0);
 
-  private drawPreviewBoard(
-    container: Phaser.GameObjects.Container,
-    themeKey: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ) {
-    const theme = themes[themeKey as keyof typeof themes];
-    const gap = 6;
-    const rows = 3, cols = 3;
-    const cellSize = Math.floor((width - gap * (cols + 1)) / cols);
-    const boardW = cellSize * cols + gap * (cols + 1);
-    const boardH = cellSize * rows + gap * (rows + 1);
-
-    // Board (local ao container 'pv')
-    const g = this.add.graphics();
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.surface).color, 1);
-    g.fillRoundedRect(x, y, boardW, boardH, 12);
-    g.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.colors.gridLine).color, 1);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cx = x + gap + c * (cellSize + gap);
-        const cy = y + gap + r * (cellSize + gap);
-        g.strokeRoundedRect(cx, cy, cellSize, cellSize, 8);
+      // preview 2x2 (não será coberto por nada)
+      const cell = 40,
+        gap = 10;
+      let px = cardX - cardW / 2 + 14,
+        py = y + 46;
+      for (let i = 0; i < 4; i++) {
+        const val = [2, 4, 8, 16][i];
+        const g = this.add.graphics();
+        g.fillStyle(
+          Phaser.Display.Color.HexStringToColor(
+            getTileColorForKey(key, val),
+          ).color,
+          1,
+        );
+        g.fillRoundedRect(px, py, cell, cell, 8);
+        g.lineStyle(
+          2,
+          Phaser.Display.Color.HexStringToColor(theme.colors.primary).color,
+          1,
+        );
+        g.strokeRoundedRect(px, py, cell, cell, 8);
+        const txt = this.add
+          .text(px + cell / 2, py + cell / 2, String(val), {
+            fontFamily: "Arial, Helvetica, sans-serif",
+            fontSize: "16px",
+            color: val <= 4 ? theme.colors.text : theme.colors.bg,
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5);
+        px += cell + gap;
+        if (i === 1) {
+          px = cardX - cardW / 2 + 14;
+          py += cell + gap;
+        }
       }
-    }
-    g.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.colors.gridHighlight).color, 0.4);
-    g.strokeRoundedRect(x + 4, y + 4, boardW - 8, boardH - 8, 10);
-    container.add(g);
 
-    // Tiles fake
-    const fakeTiles = [
-      { r: 0, c: 0, v: 2 },
-      { r: 0, c: 1, v: 4 },
-      { r: 1, c: 1, v: 8 },
-      { r: 2, c: 2, v: 16 },
-    ];
+      const isCurrent = getTheme().key === key;
+      const locked = !unlocked && key !== alwaysFreeKey;
 
-    for (const ft of fakeTiles) {
-      const cx = x + gap + ft.c * (cellSize + gap);
-      const cy = y + gap + ft.r * (cellSize + gap);
-      const fillHex = Phaser.Display.Color.HexStringToColor(getTileColorForKey(themeKey, ft.v)).color;
+      // botão (fica dentro do card, no canto inferior direito)
+      const btn = new UIButton(this, {
+        x: cardX + cardW / 2 - 80,
+        y: y + cardH - 24,
+        label: locked
+          ? t("locked") || "Bloqueado"
+          : isCurrent
+          ? t("selected")
+          : t("select"),
+        variant: locked ? "ghost" : isCurrent ? "secondary" : "primary",
+        size: "sm",
+        width: 120,
+        theme: mapThemeToButtonTheme(theme.colors),
+        onClick: () => {
+          if (locked) return;
+          setThemeKey(key);
+          this.scene.restart();
+        },
+      });
 
-      const rect = this.add.rectangle(cx, cy, cellSize, cellSize, fillHex, 1).setOrigin(0);
-      rect.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(theme.colors.primary).color);
+      // Se estiver bloqueado: desabilita e coloca a mensagem ABAIXO do card
+      let extraSpacing = 24; // espaçamento padrão após o card
+      if (locked) {
+        btn.setEnabled(false);
 
-      const txt = this.add.text(cx + cellSize / 2, cy + cellSize / 2, String(ft.v), {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: `${Math.floor(cellSize * 0.38)}px`,
-        color: ft.v <= 4 ? theme.colors.text : theme.colors.bg,
-        fontStyle: "bold",
-      }).setOrigin(0.5);
-      txt.setShadow(0, 0, theme.colors.glow, 8, true, true);
+        // mensagem centralizada abaixo do card (fora do card, sem cobertura)
+        const hint = this.add
+          .text(
+            cardX,
+            y + cardH + 10,
+            t("unlock_other_modes_hint") ||
+              "Conclua 2048 no Clássico para desbloquear.",
+            {
+              fontFamily: "Arial, Helvetica, sans-serif",
+              fontSize: "12px",
+              color: theme.colors.textDim,
+              align: "center",
+              wordWrap: { width: cardW * 0.96 },
+            },
+          )
+          .setOrigin(0.5, 0);
 
-      container.add(rect);
-      container.add(txt);
-    }
+        // aumenta o espaçamento vertical para acomodar a mensagem
+        extraSpacing = 10 + hint.height + 24;
+      }
+
+      // próximo bloco
+      y += cardH + extraSpacing;
+    });
   }
 }

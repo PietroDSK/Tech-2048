@@ -31,6 +31,7 @@ export type Settings = {
   sound: boolean;
   lang: "pt" | "en";
   animations: boolean;
+  music: boolean;
   themeKey: string;
 };
 
@@ -63,10 +64,11 @@ export function getSettings(): Settings {
       sound: !!parsed.sound,
       lang: parsed.lang === "en" ? "en" : "pt",
       animations: parsed.animations !== false,
+      music: parsed.music !== false,
       themeKey: typeof parsed.themeKey === "string" ? parsed.themeKey : "neon-pcb",
     };
   } catch {
-    return { sound: true, lang: "pt", animations: true, themeKey: "neon-pcb" };
+    return { sound: true, lang: "pt", animations: true, music: true, themeKey: "neon-pcb" };
   }
 }
 

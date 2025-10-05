@@ -1,17 +1,16 @@
-import type { Lang } from './i18n'
 import { t } from './i18n'
 export type AlertResult = 'new' | 'close'
-export function showGameOver(lang: Lang, score: number): Promise<AlertResult> {
+export function showGameOver(score: number): Promise<AlertResult> {
   ensureModalExists()
   const overlay = document.getElementById('modalOverlay') as HTMLDivElement
   const titleEl = document.getElementById('modalTitle') as HTMLHeadingElement
   const bodyEl = document.getElementById('modalBody') as HTMLParagraphElement
   const btnPrimary = document.getElementById('modalPrimary') as HTMLButtonElement
   const btnSecondary = document.getElementById('modalSecondary') as HTMLButtonElement
-  titleEl.textContent = t(lang, 'alert.gameOver.title')
-  bodyEl.textContent = t(lang, 'alert.gameOver.desc', { score })
-  btnPrimary.textContent = t(lang, 'alert.gameOver.new')
-  btnSecondary.textContent = t(lang, 'alert.gameOver.close')
+  titleEl.textContent = t("game_over_title")
+  bodyEl.textContent = t("game_over_score", { score })
+  btnPrimary.textContent = t("try_again")
+  btnSecondary.textContent = t("close")
   overlay.classList.remove('hidden'); overlay.classList.add('show')
   return new Promise<AlertResult>((resolve) => {
     const onClose = (result: AlertResult) => {
@@ -43,28 +42,28 @@ export function ensureSettingsMenu(){
   overlay.innerHTML = `
     <div class="modal-dialog" role="dialog" aria-labelledby="menuTitle">
       <div class="modal-header">
-        <h3 id="menuTitle">Menu</h3>
+        <h3 id="menuTitle">${t("menu_title")}</h3>
       </div>
       <div class="modal-body">
         <div class="settings-list">
           <div class="settings-row">
-            <label for="menuToggleLabels"><span data-i18n="labels">Rótulos Tech</span></label>
+            <label for="menuToggleLabels"><span data-i18n="labels">${t("tech_labels")}</span></label>
             <input type="checkbox" id="menuToggleLabels">
           </div>
           <div class="settings-row">
-            <label for="menuToggleSound"><span data-i18n="sound">Sons</span></label>
+            <label for="menuToggleSound"><span data-i18n="sound">${t("sound")}</span></label>
             <input type="checkbox" id="menuToggleSound">
           </div>
           <div class="settings-row">
-            <label for="menuLangSelect"><span data-i18n="lang">Idioma</span></label>
+            <label for="menuLangSelect"><span data-i18n="lang">${t("language")}</span></label>
             <select id="menuLangSelect">
               <option value="pt-BR">pt-BR</option>
               <option value="en">English</option>
             </select>
           </div>
           <div class="settings-row">
-            <button id="menuNewGame" class="btn" data-i18n="newGame">Novo jogo</button>
-            <button id="menuClose" class="btn ghost">Fechar</button>
+            <button id="menuNewGame" class="btn" data-i18n="newGame">${t("new_game")}</button>
+            <button id="menuClose" class="btn ghost">${t("close")}</button>
           </div>
         </div>
       </div>

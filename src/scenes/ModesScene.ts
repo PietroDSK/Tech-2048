@@ -1,95 +1,47 @@
 // src/scenes/ModesScene.ts
 import Phaser from "phaser";
-import { getTheme } from "../theme/index";
+import { getTheme } from "../theme";
+import { MenuButton } from "../ui/MenuButton";
+import { swapTo } from "../animations/transitions";
 import { t } from "../i18n";
+import { MenuIcon } from "../ui/MenuIcon";
 import { hasUnlocked2048 } from "../storage";
 
 export default class ModesScene extends Phaser.Scene {
-  private unlocked!: boolean;
-
   constructor() { super("ModesScene"); }
 
   create() {
-    const theme = getTheme();
-    const { width, height } = this.scale;
-    this.unlocked = hasUnlocked2048();
-    this.cameras.main.setBackgroundColor(theme.colors.bg);
+    const unlocked = hasUnlocked2048();
 
-    const halo = this.add.graphics();
-    halo.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.glow).color, 0.22);
-    halo.fillRoundedRect(width * 0.08, height * 0.12, width * 0.84, height * 0.76, 24);
-
-    const title = this.add.text(width / 2, height * 0.18, t("modesTitle"), {
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "36px",
-      color: theme.colors.text,
-      fontStyle: "bold",
-    }).setOrigin(0.5);
-    title.setShadow(0, 0, theme.colors.glow, 16, true, true);
-
-    const panel = this.add.graphics();
-    const pw = width * 0.84, ph = height * 0.58;
-    const px = (width - pw) / 2, py = height * 0.24;
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor(theme.colors.surface).color, 1);
-    panel.fillRoundedRect(px, py, pw, ph, 18);
-    panel.lineStyle(1, Phaser.Display.Color.HexStringToColor(theme.colors.primary).color, 0.28);
-    panel.strokeRoundedRect(px, py, pw, ph, 18);
-
-    if (!this.unlocked) {
-      this.add.text(width / 2, py + 28, t("locked"), {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "16px",
-        color: theme.colors.textDim,
-      }).setOrigin(0.5);
+    // Se entrou via deep-link/bug antes de desbloquear, manda de volta ao menu
+    if (!unlocked) {
+      swapTo(this, "MenuScene", {}, "left");
+      return;
     }
 
-    const makeBtn = (y: number, label: string, onClick: () => void, enabled = true) => {
-      const bgColor = enabled ? theme.colors.primary : theme.colors.gridHighlight;
-      const fgColor = enabled ? theme.colors.bg : theme.colors.textDim;
-      const btn = this.add.text(width / 2, y, label, {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "24px",
-        color: fgColor,
-        backgroundColor: bgColor,
-        padding: { left: 24, right: 24, top: 12, bottom: 12 },
-      }).setOrigin(0.5);
-      btn.setShadow(0, 0, theme.colors.glow, 8, true, true);
+    const c = getTheme().colors;
+    const { width, height } = this.scale;
+    this.cameras.main.setBackgroundColor(c.bg);
 
-      if (enabled) {
-        btn.setInteractive({ useHandCursor: true });
-        btn.on("pointerover", () => btn.setStyle({ backgroundColor: theme.colors.secondary }));
-        btn.on("pointerout",  () => btn.setStyle({ backgroundColor: theme.colors.primary }));
-        btn.on("pointerdown", () => {
-          this.tweens.add({ targets: btn, scale: 0.97, duration: 70, yoyo: true });
-          onClick();
-        });
-      }
-      return btn;
-    };
+    // menu no topo direito
+    new MenuIcon(this, width - 30, 30);
 
-    const enabled = this.unlocked;
-
-    makeBtn(py + ph * 0.30, t("mode4096"),  () => this.scene.start("GameScene", { mode: "4096" }), enabled);
-    makeBtn(py + ph * 0.50, t("modeEndless"), () => this.scene.start("GameScene", { mode: "endless" }), enabled);
-    makeBtn(py + ph * 0.70, t("modeCustom"),  () => {
-      if (!enabled) return;
-      const sizeStr = prompt("Size (e.g., 4x4, 8x8, up to 16x16):", "8x8");
-      if (!sizeStr) return;
-      const m = sizeStr.toLowerCase().match(/^(\d{1,2})x(\d{1,2})$/);
-      if (!m) return;
-      const rows = Math.min(16, Math.max(2, parseInt(m[1], 10)));
-      const cols = Math.min(16, Math.max(2, parseInt(m[2], 10)));
-      this.scene.start("GameScene", { mode: "custom", rows, cols });
-    }, enabled);
-
-    const back = this.add.text(width / 2, py + ph + 36, t("back"), {
+    const title = this.add.text(24, 40, t("other_modes"), {
       fontFamily: "Arial, Helvetica, sans-serif",
-      fontSize: "18px",
-      color: theme.colors.textDim,
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      fontSize: "28px",
+      color: c.text,
+    }).setOrigin(0, 0.5);
+    title.setShadow(0, 0, c.glow, 14, true, true);
 
-    back.on("pointerover", () => back.setColor(theme.colors.text));
-    back.on("pointerout",  () => back.setColor(theme.colors.textDim));
-    back.on("pointerdown", () => this.scene.start("MenuScene"));
+    const cx = width / 2;
+    let y = height * 0.28;
+    const btnWidth = Math.min(360, width * 0.84);
+
+    new MenuButton(this, cx, y, t("mode_4096"), () => swapTo(this, "GameScene", { mode: "4096" as const }, "right"), btnWidth);
+    y += 88;
+    new MenuButton(this, cx, y, t("mode_endless"), () => swapTo(this, "GameScene", { mode: "endless" as const }, "right"), btnWidth);
+    y += 88;
+    new MenuButton(this, cx, y, t("mode_custom_6x6"), () =>
+      swapTo(this, "GameScene", { mode: "custom" as const, rows: 6, cols: 6 }, "right"), btnWidth);
   }
 }
