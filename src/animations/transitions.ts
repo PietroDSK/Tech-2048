@@ -1,88 +1,62 @@
 // src/animations/transitions.ts
 import Phaser from "phaser";
 
-export type SwapDir = "left" | "right" | "up" | "down";
-
-function offsetBy(dir: SwapDir, progress: number, w: number, h: number) {
-  switch (dir) {
-    case "left":  return { outX: -progress * w, outY: 0, inX: (1 - progress) * w - w, inY: 0 };
-    case "right": return { outX:  progress * w, outY: 0, inX: w - (progress * w),    inY: 0 - 0 };
-    case "up":    return { outX: 0, outY: -progress * h, inX: 0, inY: (1 - progress) * h - h };
-    case "down":  return { outX: 0, outY:  progress * h, inX: 0, inY: h - (progress * h) };
-  }
-}
+export type TransitionDir = "none" | "fade" | "left" | "right" | "up" | "down";
 
 /**
- * Faz swap (slide) entre a cena atual e a `targetKey`.
- * Duração curta e responsiva; bloqueia input até finalizar.
+ * Transição segura entre cenas.
+ * - Desabilita input durante a troca;
+ * - FADE: fade-out da atual, start da target e stop da atual;
+ * - NONE: troca imediata (start + stop);
+ * - LEFT/RIGHT/UP/DOWN: por robustez, atualmente fazem fallback para FADE.
  */
 export function swapTo(
-  scene: Phaser.Scene,
+  from: Phaser.Scene,
   targetKey: string,
-  data?: any,
-  dir: SwapDir = "right",
-  duration = 320
+  data: any = {},
+  dir: TransitionDir = "fade",
+  duration = 280
 ) {
-  const w = scene.scale.width;
-  const h = scene.scale.height;
+  const scenePlugin = from.scene;          // ScenePlugin
+  const currentKey = from.scene.key;
+  const cam = from.cameras.main;
 
-  scene.input.enabled = false;
+  // Evita cliques durante a transição
+  if (from.input) from.input.enabled = false;
 
-  scene.scene.transition({
-    target: targetKey,
-    duration,
-    moveAbove: true, // garante que a cena alvo aparece por cima
-    sleep: false,
-    data: { ...data, __swapFrom: opposite(dir) },
-    onUpdate: function (progress: number) {
-      const { outX, outY, inX, inY } = offsetBy(dir, progress, w, h);
-      // desloca a câmera atual (OUT)
-      scene.cameras.main.setScroll(outX, outY);
+  // Já estou indo pra mesma cena? Apenas reinicia com dados.
+  if (currentKey === targetKey) {
+    scenePlugin.restart(data);
+    if (from.input) from.input.enabled = true;
+    return;
+  }
 
-      // desloca a câmera da cena alvo (IN)
-      const target = scene.scene.get(targetKey) as Phaser.Scene | undefined;
-      if (target?.cameras?.main) {
-        target.cameras.main.setScroll(inX, inY);
-      }
-    },
-    onUpdateScope: scene,
-    onComplete: () => {
-      // reseta scroll e reabilita input na cena alvo
-      const target = scene.scene.get(targetKey) as Phaser.Scene | undefined;
-      if (target?.cameras?.main) target.cameras.main.setScroll(0, 0);
-      target?.input && (target.input.enabled = true);
+  // Troca imediata
+  if (dir === "none") {
+    scenePlugin.start(targetKey, data);
+    // garante que a cena anterior não continue rodando por trás
+    scenePlugin.stop(currentKey);
+    return;
+  }
 
-      // limpa scroll da cena antiga também (se reaparecer no futuro)
-      scene.cameras.main.setScroll(0, 0);
+  // Para "left/right/up/down", usamos fallback para fade (estável)
+  // Você pode implementar slide real depois se quiser.
+  // FADE padrão (robusto)
+  cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+    // inicia a cena destino
+    scenePlugin.start(targetKey, data);
+    // interrompe a atual (nada continua por trás)
+    scenePlugin.stop(currentKey);
+  });
+
+  // Fallback extra: se algo travar no evento, ainda trocamos
+  from.time.delayedCall(duration + 80, () => {
+    // Se por algum motivo a atual ainda está ativa, força troca
+    if ((scenePlugin as any).isActive?.(currentKey)) {
+      scenePlugin.start(targetKey, data);
+      scenePlugin.stop(currentKey);
     }
   });
-}
 
-export function opposite(dir: SwapDir): SwapDir {
-  return dir === "left" ? "right"
-    : dir === "right" ? "left"
-    : dir === "up" ? "down"
-    : "up";
-}
-
-/** Cena chamou `create` e quer entrar com swap (caso foi iniciada via swapTo). */
-export function enterWithSwap(scene: Phaser.Scene, data: any) {
-  const dir = (data && data.__swapFrom) as SwapDir | undefined;
-  if (!dir) return;
-  const w = scene.scale.width;
-  const h = scene.scale.height;
-  const start =
-    dir === "left"  ? { x: -w, y: 0 } :
-    dir === "right" ? { x:  w, y: 0 } :
-    dir === "up"    ? { x: 0, y: -h } :
-                      { x: 0, y:  h };
-  scene.cameras.main.setScroll(start.x, start.y);
-
-  scene.tweens.add({
-    targets: scene.cameras.main,
-    scrollX: 0,
-    scrollY: 0,
-    duration: 320,
-    ease: "Cubic.Out"
-  });
+  cam.fadeOut(duration, 0, 0, 0);
 }

@@ -1,6 +1,6 @@
 {
   "icon": {
-    "sources": ["resources/icon.png"]
+    "sources": ["resources/logo.png"]
   },
   "splash": {
     "sources": ["resources/splash.png"],

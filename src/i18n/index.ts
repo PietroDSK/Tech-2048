@@ -26,6 +26,14 @@ const messages: Record<Lang, Record<string, string>> = {
     retry: "Tentar de novo",
 
     // Menu
+    menu_title: "Tech 2048",
+    menu_subtitle: "Jogo de puzzle tecnológico",
+    menu_play_classic: "Jogar Clássico",
+    menu_other_modes: "Outros Modos",
+    menu_options: "Opções",
+    menu_exit: "Sair",
+    menu_modes_locked: "Desbloqueie ao atingir 2048",
+    unlock_2048_hint: "Complete 2048 no modo clássico para desbloquear",
     play_classic: "Jogar Clássico",
     other_modes: "Outros modos",
     themes: "Temas",
@@ -51,9 +59,9 @@ const messages: Record<Lang, Record<string, string>> = {
     // Theme Scene
     selected: "Selecionado",
     select: "Selecionar",
+    locked: "Bloqueado",
 
     // UI Menu Settings
-    menu_title: "Menu",
     tech_labels: "Rótulos Tech",
     sound: "Sons",
     new_game: "Novo jogo",
@@ -90,6 +98,14 @@ const messages: Record<Lang, Record<string, string>> = {
     retry: "Try again",
 
     // Menu
+    menu_title: "Tech 2048",
+    menu_subtitle: "Technological puzzle game",
+    menu_play_classic: "Play Classic",
+    menu_other_modes: "Other Modes",
+    menu_options: "Options",
+    menu_exit: "Exit",
+    menu_modes_locked: "Unlock by reaching 2048",
+    unlock_2048_hint: "Complete 2048 in classic mode to unlock",
     play_classic: "Play Classic",
     other_modes: "Other Modes",
     themes: "Themes",
@@ -115,9 +131,9 @@ const messages: Record<Lang, Record<string, string>> = {
     // Theme Scene
     selected: "Selected",
     select: "Select",
+    locked: "Locked",
 
     // UI Menu Settings
-    menu_title: "Menu",
     tech_labels: "Tech Labels",
     sound: "Sound",
     new_game: "New Game",

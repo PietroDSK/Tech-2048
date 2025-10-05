@@ -4,7 +4,14 @@ import { UIButton, mapThemeToButtonTheme } from "./Button";
 import { getTheme } from "../theme";
 
 export class MenuButton extends UIButton {
-  constructor(scene: Phaser.Scene, x: number, y: number, label: string, onClick: () => void, widthOverride?: number) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    label: string,
+    onClick: () => void,
+    widthOverride?: number
+  ) {
     super(scene, {
       x, y,
       label,
@@ -14,7 +21,5 @@ export class MenuButton extends UIButton {
       theme: mapThemeToButtonTheme(getTheme().colors),
       onClick
     });
-    // A hitbox já é configurada no UIButton (retângulo centralizado).
-    // Não sobrescrever aqui evita inconsistências.
   }
 }

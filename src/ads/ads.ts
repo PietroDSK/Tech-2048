@@ -30,7 +30,7 @@ const DEFAULT_CFG: AdConfig = {
   // IDs de TESTE do Google (seguro para desenvolvimento)
   interstitialId: 'ca-app-pub-8826867524630571/6669912483',
   rewardedId: 'ca-app-pub-8826867524630571/5784378638',
-  testMode: true,
+  testMode: false,
   requestConsent: true,
 };
 

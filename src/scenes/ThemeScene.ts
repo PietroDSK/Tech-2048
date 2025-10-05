@@ -130,7 +130,7 @@ export default class ThemeScene extends Phaser.Scene {
         x: cardX + cardW / 2 - 80,
         y: y + cardH - 24,
         label: locked
-          ? t("locked") || "Bloqueado"
+          ? t("locked")
           : isCurrent
           ? t("selected")
           : t("select"),
@@ -155,8 +155,7 @@ export default class ThemeScene extends Phaser.Scene {
           .text(
             cardX,
             y + cardH + 10,
-            t("unlock_other_modes_hint") ||
-              "Conclua 2048 no Clássico para desbloquear.",
+            t("unlock_other_modes_hint"),
             {
               fontFamily: "Arial, Helvetica, sans-serif",
               fontSize: "12px",

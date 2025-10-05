@@ -10,7 +10,7 @@ import { ensureParticles, burstAt } from "../animations/particles";
 import { TileTrail } from "../animations/trail";
 import { MenuIcon } from "../ui/MenuIcon";
 import { swapTo } from "../animations/transitions";
-import { MusicManager } from "../audio/MusicManager";
+import { getGlobalMusic } from "../audio/MusicSingleton";
 import { hideBanner, showBannerBottom } from "../native-ads";
 import {
   prepareInterstitial,
@@ -81,6 +81,7 @@ class CircleIconButton extends Phaser.GameObjects.Container {
   private bg!: Phaser.GameObjects.Arc;
   private icon!: Phaser.GameObjects.Text;
   private badge?: Phaser.GameObjects.Text;
+  private hitZone!: Phaser.GameObjects.Zone; // <- área interativa retangular cobrindo todo o botão
   private radius: number;
 
   constructor(
@@ -125,47 +126,7 @@ class CircleIconButton extends Phaser.GameObjects.Container {
     this.add([shadow, this.bg, this.icon]);
     this.setSize(radius * 2, radius * 2);
 
-    // --- INTERAÇÃO ---
-    // usa o próprio círculo como hit area
-    this.setInteractive(
-      new Phaser.Geom.Circle(0, 0, radius),
-      Phaser.Geom.Circle.Contains,
-    );
-    this.input.hitAreaCallback = Phaser.Geom.Circle.Contains;
-
-    this.on("pointerdown", () => {
-      scene.tweens.add({
-        targets: this,
-        scale: 0.9,
-        duration: 70,
-        ease: "sine.out",
-      });
-    });
-
-    this.on("pointerup", (p: Phaser.Input.Pointer) => {
-      // garante que o pointerup é dentro do círculo
-      const local = this.worldToLocal(p.x, p.y);
-      const inside =
-        Phaser.Math.Distance.Between(0, 0, local.x, local.y) <= this.radius;
-      scene.tweens.add({
-        targets: this,
-        scale: 1.0,
-        duration: 90,
-        ease: "back.out(2.2)",
-      });
-      if (inside) onClick();
-    });
-
-    this.on("pointerout", () => {
-      scene.tweens.add({
-        targets: this,
-        scale: 1.0,
-        duration: 90,
-        ease: "back.out(2.2)",
-      });
-    });
-
-    // --- BADGE ---
+    // --- BADGE (opcional) ---
     if (withBadge) {
       this.badge = scene.add
         .text(radius * 0.85, -radius * 0.85, "×0", {
@@ -179,6 +140,39 @@ class CircleIconButton extends Phaser.GameObjects.Container {
         .setDepth(3);
       this.add(this.badge);
     }
+
+    // --- ÁREA INTERATIVA CONFIÁVEL (retângulo do tamanho do botão) ---
+    // Usamos Zone para evitar qualquer surpresa com escala/hit test.
+    this.hitZone = scene.add.zone(0, 0, radius * 2, radius * 2).setOrigin(0.5);
+    this.hitZone.setInteractive({ cursor: "pointer", useHandCursor: true });
+    this.add(this.hitZone); // adicionar por último é ok (Zone não renderiza)
+
+    // Interações (apenas via hitZone; removemos worldToLocal)
+    this.hitZone.on("pointerdown", () => {
+      scene.tweens.add({
+        targets: this,
+        scale: 0.9,
+        duration: 70,
+        ease: "sine.out",
+      });
+    });
+    this.hitZone.on("pointerup", () => {
+      scene.tweens.add({
+        targets: this,
+        scale: 1.0,
+        duration: 90,
+        ease: "back.out(2.2)",
+      });
+      onClick(); // pointerup só dispara se o ponteiro está sobre o botão
+    });
+    this.hitZone.on("pointerout", () => {
+      scene.tweens.add({
+        targets: this,
+        scale: 1.0,
+        duration: 90,
+        ease: "back.out(2.2)",
+      });
+    });
 
     this.setDepth(2000);
   }
@@ -239,6 +233,7 @@ export default class GameScene extends Phaser.Scene {
 
   create(data: GameModeData) {
     this.theme = getTheme();
+    this.input.setTopOnly(true);
     this.mode = (data?.mode ?? "classic") as GameMode;
     this.cfg = configFromMode(data);
     this.rows = this.cfg.rows;
@@ -268,21 +263,26 @@ export default class GameScene extends Phaser.Scene {
     onReward?.(() => {
       this.powerups.undo++;
       this.updateUndoHud();
-      this.feedbackToast(t("reward_undo_received") || "+1 Undo recebido!");
+      this.feedbackToast(t("reward_undo_received"));
     });
 
-    // Áudio
     const bootAudio = async () => {
       try {
         if (this.sound.locked) await this.sound.unlock();
         const ctx = (this.sound as Phaser.Sound.SoundManager).context;
         if (ctx && ctx.state !== "running") await ctx.resume();
 
-        // só cria música se estiver ligada nas opções
         if (this.settings.music !== false) {
-          this.music = new MusicManager(this);
-          this.music.init();
-          this.music.updateByScore(this.score);
+          // PEGA A MESMA INSTÂNCIA SEMPRE
+          this.music = getGlobalMusic(this);
+          // reanexa a cena (seu MusicManager agora tem attach())
+          (this.music as any).attach?.(this);
+
+          // inicia só na primeira vez
+          if (!(this.music as any).isStarted?.()) {
+            this.music.init?.();
+          }
+          this.music.updateByScore?.(this.score);
         }
 
         this.input.off("pointerdown", bootAudio as any);
@@ -291,6 +291,8 @@ export default class GameScene extends Phaser.Scene {
         console.warn("[GameScene] Falha ao desbloquear áudio:", e);
       }
     };
+
+    // Chame o boot no primeiro input (iOS/web)
     this.input.once("pointerdown", bootAudio);
     this.input.keyboard?.once("keydown", bootAudio);
   }
@@ -317,7 +319,7 @@ export default class GameScene extends Phaser.Scene {
         this.sideMargin + 10,
         headerY + 22,
         `${this.mode.toUpperCase()} • ${this.rows}x${this.cols} • ${
-          t("goal") || "META"
+          t("goal")
         }: ${this.cfg.endless ? "∞" : this.cfg.target}`,
         {
           fontFamily: "Arial, Helvetica, sans-serif",
@@ -361,7 +363,7 @@ export default class GameScene extends Phaser.Scene {
         if (!shown) {
           await prepareRewarded();
           this.feedbackToast(
-            t("ad_loading_try_again") || "Anúncio carregando. Tente novamente.",
+            t("ad_loading_try_again"),
           );
         }
       },
@@ -619,12 +621,12 @@ export default class GameScene extends Phaser.Scene {
 
   private tryUndo() {
     if (this.powerups.undo <= 0) {
-      this.feedbackToast(t("no_undos") || "Sem Undos disponíveis.");
+      this.feedbackToast(t("no_undos"));
       return;
     }
     const snap = this.undoStack.pop();
     if (!snap) {
-      this.feedbackToast(t("nothing_to_undo") || "Nada para desfazer.");
+      this.feedbackToast(t("nothing_to_undo"));
       return;
     }
     this.powerups.undo--;
@@ -635,7 +637,7 @@ export default class GameScene extends Phaser.Scene {
     this.score = snap.score;
     this.registry.set("score", this.score);
     this.fullRepaint();
-    this.feedbackToast(t("move_undone") || "Jogada desfeita.");
+    this.feedbackToast(t("move_undone"));
   }
 
   private slideWithPaths(vals: number[], ids: (Id | 0)[]): SlideResult {
@@ -789,8 +791,7 @@ export default class GameScene extends Phaser.Scene {
     const boardMax = this.getBoardMax();
     if (!this.cfg.endless && boardMax >= this.cfg.target) {
       this.showOverlay(
-        t("reached_value", { v: boardMax } as any) ||
-          `Você atingiu ${boardMax}!`,
+        t("reached_value", { v: boardMax }),
         true,
       );
       return;
@@ -799,7 +800,7 @@ export default class GameScene extends Phaser.Scene {
     if (!this.canMove()) {
       this.onGameOver();
       this.showOverlay(
-        t("no_moves_game_over") || "Sem movimentos! Fim de jogo.",
+        t("no_moves_game_over"),
         false,
       );
     }
@@ -1094,8 +1095,8 @@ export default class GameScene extends Phaser.Scene {
         width / 2,
         height / 2 + 34,
         win
-          ? t("continue_endless") || "Continuar (Endless)"
-          : t("retry") || "Tentar de novo",
+          ? t("continue_endless")
+          : t("retry"),
         {
           fontFamily: "Arial, Helvetica, sans-serif",
           fontSize: "18px",
@@ -1130,7 +1131,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     const btnMenu = this.add
-      .text(width / 2, height / 2 + 84, t("back") || "Menu", {
+      .text(width / 2, height / 2 + 84, t("back"), {
         fontFamily: "Arial, Helvetica, sans-serif",
         fontSize: "16px",
         color: c.textDim,
@@ -1234,12 +1235,8 @@ export default class GameScene extends Phaser.Scene {
       prepareInterstitial();
     }
   }
-
   shutdown() {
-    this.music?.destroy();
     hideBanner().catch(() => {});
   }
-  destroy() {
-    this.music?.destroy();
-  }
+  destroy() {}
 }
