@@ -122,7 +122,7 @@ export async function prepareInterstitial(adId?: string): Promise<void> {
   interstitialReady = false;
 
   const options: AdOptions = {
-    adId: adId ?? CFG.interstitialId,
+    adId: CFG.interstitialId,
     // `isTesting` não é necessário se você usar os ad units de teste
     // mas manter `testMode` evita surpresas se alguém trocar os IDs:
     isTesting: CFG.testMode,
@@ -151,7 +151,7 @@ export async function prepareRewarded(adId?: string): Promise<void> {
   rewardedReady = false;
 
   const options: RewardAdOptions = {
-    adId: adId ?? CFG.rewardedId,
+    adId: CFG.rewardedId,
     isTesting: CFG.testMode,
   };
   await AdMob.prepareRewardVideoAd(options);

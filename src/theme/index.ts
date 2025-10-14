@@ -27,68 +27,98 @@ export type Theme = {
 // ---------- Temas -------------------------------------------------------------
 
 const pcb: Theme["colors"] = {
-  bg: "#0b1220",
-  surface: "#0f1a28",       // azul petróleo (tabuleiro)
-  surfaceAlt: "#0f1e2b",    // cartões/botões (um pouco mais claro)
-  primary: "#19dfff",       // ciano
-  glow: "#0fd3ff",
-  gridLine: "#1a2b3b",
-  gridHighlight: "#28485f",
-  text: "#e6fbff",
-  textDim: "#84d9f2",
+  // Fundo bem escuro, quase preto-azulado
+  bg: "#080c14",
+  // Superfície mais escura e azulada (anteriormente verde-petróleo)
+  surface: "#0c1420",
+  // Cartões/botões um pouco mais claro que a superfície
+  surfaceAlt: "#101a28",
+  // Primário: ciano elétrico, um pouco mais escuro
+  primary: "#101a28",
+  // Brilho: ciano forte e frio
+  glow: "#1ec2ff",
+  // Linha da grade: azul escuro e frio
+  gridLine: "#1c2a38",
+  // Destaque da grade: azul acinzentado frio
+  gridHighlight: "#24405a",
+  // Texto: branco azulado muito claro
+  text: "#e0f8ff",
+  // Texto fraco: ciano-acinzentado frio
+  textDim: "#78b8cc",
 };
 
 const punk: Theme["colors"] = {
-  bg: "#0d0712",
-  surface: "#151022",
-  surfaceAlt: "#1a1426",
-  primary: "#ff2bd6",
-  glow: "#ff58e5",
-  gridLine: "#2b1f3a",
-  gridHighlight: "#3a2a4f",
-  text: "#fbeaff",
-  textDim: "#d3b2ea",
+  // Fundo: roxo escuro, quase preto
+  bg: "#0a0610",
+  // Superfície: azul-marinho púrpura
+  surface: "#100c1e",
+  // Cartões/botões: um pouco mais claro
+  surfaceAlt: "#140f25",
+  // Primário: Roxo elétrico frio (magenta menos quente)
+  primary: "#9d40ff",
+  // Brilho: roxo mais vibrante
+  glow: "#ad58ff",
+  // Linha da grade: roxo escuro
+  gridLine: "#211b30",
+  // Destaque da grade: roxo acinzentado
+  gridHighlight: "#302645",
+  // Texto: branco-púrpura frio
+  text: "#f0eaff",
+  // Texto fraco: cinza-púrpura frio
+  textDim: "#bfa0d9",
 };
 
 const ocean: Theme["colors"] = {
-  bg: "#071019",
-  surface: "#0b1824",
-  surfaceAlt: "#0f1f2c",
-  primary: "#3ae2ff",
-  glow: "#2dd9ff",
-  gridLine: "#183245",
-  gridHighlight: "#28506b",
-  text: "#e8fbff",
-  textDim: "#9ed9ee",
+  // Fundo: azul-marinho muito escuro
+  bg: "#040c12",
+  // Superfície: azul profundo do oceano
+  surface: "#07141f",
+  // Cartões/botões: um pouco mais claro
+  surfaceAlt: "#0a1b28",
+  // Primário: Azul puro e profundo (menos ciano)
+  primary: "#188bff",
+  // Brilho: azul vibrante
+  glow: "#30aaff",
+  // Linha da grade: azul escuro e frio
+  gridLine: "#14283c",
+  // Destaque da grade: azul acinzentado profundo
+  gridHighlight: "#204058",
+  // Texto: branco-azul muito claro
+  text: "#e4f8ff",
+  // Texto fraco: azul-claro suave e frio
+  textDim: "#8ccce0",
 };
 
 export const themes: Record<ThemeKey, Theme> = {
   "neon-pcb": {
     key: "neon-pcb",
     name: "Neon PCB",
-    colors: pcb,
+    colors: pcb, // Mantendo a variável de cores principal 'pcb'
+    // Paleta de cores alterada para cianos e azuis mais frios e profundos
     tilePalette: [
-      "#1fd1d1", "#20e3c2", "#26f0a4", "#3efc7a", "#7bff66",
-      "#a7ff4a", "#d6ff3b", "#fff83b", "#ffe03b", "#ffc13b", "#ffa43b",
+      "#00FFFF", "#00E0E0", "#00C0C0", "#00A0A0", "#008080",
+      "#006060", "#004040", "#002020", "#001010", "#000808", "#000404",
     ],
   },
   "cyberpunk-magenta": {
     key: "cyberpunk-magenta",
     name: "Cyberpunk Magenta",
     requires2048: true,
-    colors: punk,
+    colors: punk, // Mantendo a variável de cores principal 'punk'
+    // Paleta de cores alterada para tons de roxo e azul-púrpura mais frios
     tilePalette: [
-      "#9a4dff","#b14dff","#ca4dff","#e44dff","#ff4df7",
-      "#ff4dd8","#ff4db8","#ff4d98","#ff4d78","#ff4d58","#ff4d38",
+      "#5D3FD3", "#4A2FCB", "#381FC3", "#250FBB", "#1300B3",
+      "#0B0096", "#07007A", "#03005D", "#000041", "#000025", "#00000C",
     ],
   },
   "ocean-cyan": {
     key: "ocean-cyan",
     name: "Ocean Cyan",
-    colors: ocean,
+    colors: ocean, // Mantendo a variável de cores principal 'ocean'
+    // Paleta de cores alterada para tons de azul e ciano-esverdeado muito frios e oceânicos
     tilePalette: [
-      "#2fc6ff","#35d2ff","#3be0ff","#41ecff","#6af2ff",
-      "#8ff7ff","#b3fbff","#cdfcff","#e0fdff","#f1feff","#ffffff",
+      "#1E90FF", "#00BFFF", "#00CED1", "#20B2AA", "#48D1CC",
+      "#40E0D0", "#6495ED", "#ADD8E6", "#B0E0E6", "#F0F8FF", "#FFFFFF",
     ],
   },
 };

@@ -50,6 +50,7 @@ const messages: Record<Lang, Record<string, string>> = {
     off: "DESLIGADO",
     portuguese: "Português",
     english: "English",
+    privacy_and_cookies: "Privacidade & Cookies",
 
     // Game Modes
     mode_4096: "4096",
@@ -122,7 +123,7 @@ const messages: Record<Lang, Record<string, string>> = {
     off: "OFF",
     portuguese: "Português",
     english: "English",
-
+    privacy_and_cookies: "Privacy & Cookies",
     // Game Modes
     mode_4096: "4096",
     mode_endless: "Endless",

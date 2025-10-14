@@ -2,11 +2,8 @@
 import Phaser from "phaser";
 import { getSettings, setUnlocked2048 } from "../storage";
 import { getTheme, getTileColor } from "../theme/index";
-import { tweenTo } from "../animations/tweens-helper";
-import { mergePulse } from "../animations/tiles";
-import { zoomPunch, shakeOnMerge, flashWin } from "../animations/camera";
-import { scoreFly } from "../animations/score";
-import { ensureParticles, burstAt } from "../animations/particles";
+// Animações antigas removidas/otimizadas: tweenTo, mergePulse, zoomPunch, shakeOnMerge, flashWin, scoreFly, burstAt
+import { ensureParticles } from "../animations/particles";
 import { TileTrail } from "../animations/trail";
 import { MenuIcon } from "../ui/MenuIcon";
 import { swapTo } from "../animations/transitions";
@@ -20,6 +17,17 @@ import {
   onReward,
 } from "../ads/ads";
 import { t } from "../i18n";
+
+// >>> Impact Kit
+import {
+  juicyImpact,
+  floatLabel,
+  slowMo,
+  ringPulse,
+  popPunch,
+  cameraKick,
+  confettiBurst,
+} from "../juice/effects";
 
 // -----------------------------------------------------------------------------
 // Tipos e helpers
@@ -79,9 +87,10 @@ interface SlideResult {
 // Botões circulares (Undo / Rewarded)
 class CircleIconButton extends Phaser.GameObjects.Container {
   private bg!: Phaser.GameObjects.Arc;
-  private icon!: Phaser.GameObjects.Text;
+  private iconTxt?: Phaser.GameObjects.Text;
+  private iconImg?: Phaser.GameObjects.Sprite;
   private badge?: Phaser.GameObjects.Text;
-  private hitZone!: Phaser.GameObjects.Zone; // <- área interativa retangular cobrindo todo o botão
+  private hitZone!: Phaser.GameObjects.Zone;
   private radius: number;
 
   constructor(
@@ -93,6 +102,7 @@ class CircleIconButton extends Phaser.GameObjects.Container {
     colors: { fill: string; stroke: string; text: string; glow: string },
     onClick: () => void,
     withBadge = false,
+    sprite?: { key: string; offsetX?: number; offsetY?: number }, // tiramos 'anim' daqui
   ) {
     super(scene, x, y);
     scene.add.existing(this);
@@ -101,32 +111,46 @@ class CircleIconButton extends Phaser.GameObjects.Container {
     const fill = Phaser.Display.Color.HexStringToColor(colors.fill).color;
     const stroke = Phaser.Display.Color.HexStringToColor(colors.stroke).color;
 
-    // sombra (drop)
-    const shadow = scene.add.circle(2, 4, radius * 1.05, 0x000000, 0.35);
-    shadow.setBlendMode(Phaser.BlendModes.MULTIPLY);
-    shadow.setDepth(0);
+    const shadow = scene.add
+      .circle(2, 4, radius * 1.05, 0x000000, 0.35)
+      .setBlendMode(Phaser.BlendModes.MULTIPLY)
+      .setDepth(0);
 
-    // círculo principal
     this.bg = scene.add
       .circle(0, 0, radius, fill, 1)
-      .setStrokeStyle(2, stroke, 1);
-    this.bg.setDepth(1);
+      .setStrokeStyle(2, stroke, 1)
+      .setDepth(1);
 
-    // ícone central
-    this.icon = scene.add
-      .text(0, 0, label, {
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: `${Math.round(radius * 0.95)}px`,
-        color: colors.text,
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5)
-      .setDepth(2);
+    if (sprite && scene.textures.exists(sprite.key)) {
+      this.iconImg = scene.add
+        .sprite(0, 0, sprite.key, 0)
+        .setOrigin(0.5)
+        .setDepth(2);
 
-    this.add([shadow, this.bg, this.icon]);
+      // encaixa confortavelmente no círculo (com margem)
+      const desired = radius * 2 * 0.86;
+      this.iconImg.setDisplaySize(desired, desired);
+
+      if (sprite.offsetX) this.iconImg.x += sprite.offsetX;
+      if (sprite.offsetY) this.iconImg.y += sprite.offsetY;
+    } else {
+      this.iconTxt = scene.add
+        .text(0, 0, label, {
+          fontFamily: "Arial, Helvetica, sans-serif",
+          fontSize: `${Math.round(radius * 0.95)}px`,
+          color: colors.text,
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(2);
+    }
+
+    this.add([shadow, this.bg]);
+    if (this.iconImg) this.add(this.iconImg);
+    if (this.iconTxt) this.add(this.iconTxt);
+
     this.setSize(radius * 2, radius * 2);
 
-    // --- BADGE (opcional) ---
     if (withBadge) {
       this.badge = scene.add
         .text(radius * 0.85, -radius * 0.85, "×0", {
@@ -141,13 +165,10 @@ class CircleIconButton extends Phaser.GameObjects.Container {
       this.add(this.badge);
     }
 
-    // --- ÁREA INTERATIVA CONFIÁVEL (retângulo do tamanho do botão) ---
-    // Usamos Zone para evitar qualquer surpresa com escala/hit test.
     this.hitZone = scene.add.zone(0, 0, radius * 2, radius * 2).setOrigin(0.5);
-    this.hitZone.setInteractive({ cursor: "pointer", useHandCursor: true });
-    this.add(this.hitZone); // adicionar por último é ok (Zone não renderiza)
+    this.hitZone.setInteractive({ useHandCursor: true });
+    this.add(this.hitZone);
 
-    // Interações (apenas via hitZone; removemos worldToLocal)
     this.hitZone.on("pointerdown", () => {
       scene.tweens.add({
         targets: this,
@@ -163,7 +184,7 @@ class CircleIconButton extends Phaser.GameObjects.Container {
         duration: 90,
         ease: "back.out(2.2)",
       });
-      onClick(); // pointerup só dispara se o ponteiro está sobre o botão
+      onClick();
     });
     this.hitZone.on("pointerout", () => {
       scene.tweens.add({
@@ -180,8 +201,21 @@ class CircleIconButton extends Phaser.GameObjects.Container {
   setBadge(text: string) {
     this.badge?.setText(text);
   }
-}
 
+  // TOCAR ANIMAÇÃO 1x A CADA N MILISSEGUNDOS
+  armIdleAnimation(animKey: string, intervalMs = 3000) {
+    if (!this.iconImg) return;
+    this.iconImg.setFrame(0);
+    this.scene.time.addEvent({
+      delay: intervalMs,
+      loop: true,
+      callback: () => {
+        // toca 1x (repeat:0 definido no ensureUiAnims)
+        this.iconImg!.play(animKey, true);
+      },
+    });
+  }
+}
 // -----------------------------------------------------------------------------
 // Cena
 export default class GameScene extends Phaser.Scene {
@@ -207,7 +241,7 @@ export default class GameScene extends Phaser.Scene {
   // Objetos/estado
   private tiles = new Map<Id, Phaser.GameObjects.Container>();
   private dragStart?: Phaser.Math.Vector2;
-  private music!: MusicManager;
+  private music: any; // mantido flexível para evitar erro de tipo quando MusicManager não é importado
   private audioCtx: AudioContext | null = null;
   private score = 0;
   private best = 0;
@@ -231,6 +265,22 @@ export default class GameScene extends Phaser.Scene {
     super("GameScene");
   }
 
+  preload() {
+    // ...seu preload (se houver)
+    this.load.spritesheet("icoUndo", "assets/ui/undo_spin_spritesheet.png", {
+      frameWidth: 256,
+      frameHeight: 256,
+    });
+    this.load.spritesheet(
+      "icoReward",
+      "assets/ui/reward_pulse_spritesheet.png",
+      {
+        frameWidth: 256,
+        frameHeight: 256,
+      },
+    );
+  }
+
   create(data: GameModeData) {
     this.theme = getTheme();
     this.input.setTopOnly(true);
@@ -239,7 +289,7 @@ export default class GameScene extends Phaser.Scene {
     this.rows = this.cfg.rows;
     this.cols = this.cfg.cols;
 
-    ensureParticles(this);
+    ensureParticles(this); // garante textura 'spark' para confettiBurst
     this.registry.set("score", 0);
 
     this.data.set("tileTrail", new TileTrail(this));
@@ -297,9 +347,42 @@ export default class GameScene extends Phaser.Scene {
     this.input.keyboard?.once("keydown", bootAudio);
   }
 
+  private ensureUiAnims() {
+    // Smoothing nos ícones mesmo que o jogo use pixelArt:true
+    const Filter = Phaser.Textures.FilterMode;
+    this.textures.get("icoUndo")?.setFilter?.(Filter.LINEAR);
+    this.textures.get("icoReward")?.setFilter?.(Filter.LINEAR);
+
+    // Animações tocam 1x (repeat:0); o loop a cada 3s vamos agendar por timer
+    if (!this.anims.exists("ui-undo-spin")) {
+      this.anims.create({
+        key: "ui-undo-spin",
+        frames: this.anims.generateFrameNumbers("icoUndo", {
+          start: 0,
+          end: 7,
+        }),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists("ui-reward-pulse")) {
+      this.anims.create({
+        key: "ui-reward-pulse",
+        frames: this.anims.generateFrameNumbers("icoReward", {
+          start: 0,
+          end: 7,
+        }),
+        frameRate: 10,
+        yoyo: true,
+        repeat: 0,
+      });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Header (título à esquerda, botões circulares à direita)
   private paintHeaderHud() {
+    this.ensureUiAnims();
     const { width } = this.scale;
     const c = this.theme.colors;
 
@@ -318,9 +401,9 @@ export default class GameScene extends Phaser.Scene {
       .text(
         this.sideMargin + 10,
         headerY + 22,
-        `${this.mode.toUpperCase()} • ${this.rows}x${this.cols} • ${
-          t("goal")
-        }: ${this.cfg.endless ? "∞" : this.cfg.target}`,
+        `${this.mode.toUpperCase()} • ${this.rows}x${this.cols} • ${t(
+          "goal",
+        )}: ${this.cfg.endless ? "∞" : this.cfg.target}`,
         {
           fontFamily: "Arial, Helvetica, sans-serif",
           fontSize: "13px",
@@ -330,7 +413,6 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0, 0.5)
       .setAlpha(0.95);
 
-    // Botões circulares à direita
     // Botões circulares à direita
     const right = width - this.sideMargin - 8;
     const radius = 18;
@@ -344,7 +426,9 @@ export default class GameScene extends Phaser.Scene {
       { fill: c.surfaceAlt, stroke: c.primary, text: c.text, glow: c.primary },
       () => this.tryUndo(),
       true,
+      { key: "icoUndo" },
     );
+    this.undoBtn.armIdleAnimation("ui-undo-spin", 3000); // <- roda a cada 3s
 
     this.rewardBtn = new CircleIconButton(
       this,
@@ -362,13 +446,13 @@ export default class GameScene extends Phaser.Scene {
         const shown = await showRewardedIfReady();
         if (!shown) {
           await prepareRewarded();
-          this.feedbackToast(
-            t("ad_loading_try_again"),
-          );
+          this.feedbackToast(t("ad_loading_try_again"));
         }
       },
       false,
+      { key: "icoReward" },
     );
+    this.rewardBtn.armIdleAnimation("ui-reward-pulse", 3000);
 
     this.add.existing(this.undoBtn);
     this.add.existing(this.rewardBtn);
@@ -449,7 +533,6 @@ export default class GameScene extends Phaser.Scene {
         g.strokeRoundedRect(cx, cy, this.cellSize, this.cellSize, 10);
       }
 
-    // ⚠️ Removido: inner border/moldura interna
     this.cameras.main.setBackgroundColor(c.bg);
   }
 
@@ -496,7 +579,7 @@ export default class GameScene extends Phaser.Scene {
     const tc = this.theme.colors;
     const { x, y } = this.cellXY(r, c);
     const cont = this.add.container(x, y).setDepth(1);
-    cont.setScale(0.6);
+    cont.setScale(1); // <- antes era 0.6
 
     const fillHex = Phaser.Display.Color.HexStringToColor(
       getTileColor(value),
@@ -512,8 +595,7 @@ export default class GameScene extends Phaser.Scene {
         this.cellSize * 0.9,
         this.cellSize * 0.9,
         12,
-      );
-    shadow
+      )
       .setScale(1.02, 1.05)
       .setAlpha(0.35)
       .setBlendMode(Phaser.BlendModes.MULTIPLY);
@@ -522,13 +604,9 @@ export default class GameScene extends Phaser.Scene {
     const body = this.add.graphics();
     body
       .fillStyle(fillHex, 1)
-      .fillRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
-    body.lineStyle(
-      2,
-      Phaser.Display.Color.HexStringToColor(tc.primary).color,
-      1,
-    );
-    body.strokeRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
+      .fillRoundedRect(0, 0, this.cellSize, this.cellSize, 12)
+      .lineStyle(2, Phaser.Display.Color.HexStringToColor(tc.primary).color, 1)
+      .strokeRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
 
     const txt = this.add
       .text(this.cellSize / 2, this.cellSize / 2, String(value), {
@@ -545,8 +623,9 @@ export default class GameScene extends Phaser.Scene {
     cont.setData("txt", txt);
 
     this.tiles.set(id, cont);
+
     if (pop) {
-      // pop + squash
+      // 1) tween de spawn até scale 1.0
       cont.setScale(0.2);
       this.tweens.add({
         targets: cont,
@@ -554,16 +633,33 @@ export default class GameScene extends Phaser.Scene {
         scaleY: 0.95,
         duration: 110,
         ease: "back.out(2.4)",
+        onComplete: () => {
+          this.tweens.add({
+            targets: cont,
+            scaleX: 1.0,
+            scaleY: 1.0,
+            duration: 80,
+            ease: "sine.out",
+          });
+        },
       });
-      this.tweens.add({
-        targets: cont,
-        scaleX: 1.0,
-        scaleY: 1.0,
-        duration: 80,
-        delay: 110,
-        ease: "sine.out",
+
+      // 2) efeitos visuais (anel) já no spawn
+      ringPulse(
+        this,
+        x + this.cellSize / 2,
+        y + this.cellSize / 2,
+        0xffffff,
+        14,
+        180,
+      );
+
+      // 3) pequeno punch DEPOIS do spawn (evita yoyo voltar para 0.2)
+      this.time.delayedCall(200, () => {
+        // popPunch agora aceita delay/yoyo por opts, mas aqui mantemos padrão
+        popPunch(this, cont, 0.06, 110);
       });
-    } else cont.setScale(1);
+    }
   }
 
   private destroyTile(id: Id) {
@@ -770,7 +866,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (!anyMoved) {
+      // toque sutil quando bate na parede
+      cameraKick(this, 90, 0.004);
       this.cameras.main.shake(120, 0.004);
+      this.playBumpSfx();
       return;
     }
 
@@ -790,19 +889,13 @@ export default class GameScene extends Phaser.Scene {
     }
     const boardMax = this.getBoardMax();
     if (!this.cfg.endless && boardMax >= this.cfg.target) {
-      this.showOverlay(
-        t("reached_value", { v: boardMax }),
-        true,
-      );
+      this.showOverlay(t("reached_value", { v: boardMax }), true);
       return;
     }
     this.spawnRandomTile();
     if (!this.canMove()) {
       this.onGameOver();
-      this.showOverlay(
-        t("no_moves_game_over"),
-        false,
-      );
+      this.showOverlay(t("no_moves_game_over"), false);
     }
   }
 
@@ -881,7 +974,7 @@ export default class GameScene extends Phaser.Scene {
             tweens.push(tw);
           }
 
-      // Merges – pequena curva de atração + efeitos
+      // Merges – curva de atração + Impact Kit
       for (const g of allOps)
         for (const op of g.ops)
           if (op.type === "merge") {
@@ -932,28 +1025,17 @@ export default class GameScene extends Phaser.Scene {
                 );
               }
 
-              // flash ring
-              const ring = this.add
-                .circle(cx, cy, this.cellSize * 0.2, 0xffffff, 0.18)
-                .setDepth(1.2);
-              this.tweens.add({
-                targets: ring,
-                radius: this.cellSize * 0.65,
-                alpha: 0,
-                duration: 240,
-                ease: "quad.out",
-                onComplete: () => ring.destroy(),
-              });
+              // Impact Kit (combo): punch + ring + camera + confetti
+              juicyImpact(this, cx, cy, A);
+              floatLabel(this, cx, cy - 12, `+${op.newValue}`, "#ffe066");
 
-              mergePulse(A, this);
-              burstAt(this, cx, cy, 14);
-              scoreFly(this, cx, cy - 12, op.newValue);
+              // Efeito extra em merges grandes
+              if (op.newValue >= 1024) {
+                slowMo(this, 0.85, 120);
+                confettiBurst(this, cx, cy, "spark");
+              }
 
               this.onMerge(op.newValue);
-              if (op.newValue >= 512) shakeOnMerge(this, 0.003, 120);
-              if (op.newValue >= 1024) zoomPunch(this);
-              if (op.newValue === 2048) flashWin(this);
-
               this.playMergeSfx(op.newValue);
             };
 
@@ -1034,6 +1116,7 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  // Substitui a antiga
   private playMergeSfx(value: number) {
     if (!this.settings.sound) return;
     try {
@@ -1041,19 +1124,105 @@ export default class GameScene extends Phaser.Scene {
         this.audioCtx = new (window.AudioContext ||
           (window as any).webkitAudioContext)();
       const ctx = this.audioCtx!;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const step = Math.log2(value) - 1; // 2->0, 4->1...
+      const now = ctx.currentTime;
+
+      // Pitch escala por valor (mantém tua lógica)
+      const step = Math.max(0, Math.log2(value) - 1); // 2->0, 4->1, 8->2...
       const base = 220;
-      const freq = base * Math.pow(1.12246, step);
+      const freq = base * Math.pow(1.12246, step); // ~semitom
+
+      // Camada 1: beep “musical”
+      const osc = ctx.createOscillator();
       osc.type = "triangle";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.2);
+      osc.frequency.setValueAtTime(freq, now);
+
+      const g = ctx.createGain();
+      const A = 0.005,
+        D = 0.12;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.18, now + A);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + A + D);
+      osc.connect(g).connect(ctx.destination);
+
+      // Camada 2: “pop” curto (ruído filtrado) para dar ataque
+      const noiseBuf = ctx.createBuffer(
+        1,
+        Math.floor(ctx.sampleRate * 0.02),
+        ctx.sampleRate,
+      );
+      const ch = noiseBuf.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * 0.8;
+
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuf;
+
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(1200, now);
+
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.18, now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+
+      noise.connect(hp).connect(ng).connect(ctx.destination);
+
+      // Dispara
+      osc.start(now);
+      noise.start(now);
+      osc.stop(now + A + D + 0.02);
+      noise.stop(now + 0.08);
+    } catch {}
+  }
+
+  // NOVO: som de “batida” quando não há movimento no swipe
+  private playBumpSfx() {
+    if (!this.settings.sound) return;
+    try {
+      if (!this.audioCtx)
+        this.audioCtx = new (window.AudioContext ||
+          (window as any).webkitAudioContext)();
+      const ctx = this.audioCtx!;
+      const now = ctx.currentTime;
+
+      // Dois sines graves para “thud”
+      const freqs = [160, 90];
+      const total = 0.15;
+      for (const f of freqs) {
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime(f, now);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + total);
+        o.connect(g).connect(ctx.destination);
+        o.start(now);
+        o.stop(now + total + 0.02);
+      }
+
+      // “tick” curtíssimo (ruído low-pass) pra dar definição
+      const noiseBuf = ctx.createBuffer(
+        1,
+        Math.floor(ctx.sampleRate * 0.02),
+        ctx.sampleRate,
+      );
+      const ch = noiseBuf.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * 0.7;
+
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf;
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(300, now);
+
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.12, now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+
+      src.connect(lp).connect(ng).connect(ctx.destination);
+      src.start(now);
+      src.stop(now + 0.08);
     } catch {}
   }
 
@@ -1094,9 +1263,7 @@ export default class GameScene extends Phaser.Scene {
       .text(
         width / 2,
         height / 2 + 34,
-        win
-          ? t("continue_endless")
-          : t("retry"),
+        win ? t("continue_endless") : t("retry"),
         {
           fontFamily: "Arial, Helvetica, sans-serif",
           fontSize: "18px",

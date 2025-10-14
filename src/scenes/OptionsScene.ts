@@ -6,6 +6,7 @@ import { UIButton, mapThemeToButtonTheme } from "../ui/Button";
 import { Selector } from "../ui/Selector";
 import { MenuIcon } from "../ui/MenuIcon";
 import { getSettings, saveSettings } from "../storage";
+import { showPrivacyOptions } from "../privacy/consent";
 
 export default class OptionsScene extends Phaser.Scene {
   constructor() { super("OptionsScene"); }
@@ -90,5 +91,24 @@ export default class OptionsScene extends Phaser.Scene {
         this.scene.restart(); // reaplica textos
       }
     );
+
+    // --- Privacidade & Cookies (reabre o consentimento) ---
+    new UIButton(this, {
+      x: width / 2,
+      y: 320,
+      label: t("privacy_and_cookies"), // use t(...) se já tiver chave no seu i18n
+      size: "md",
+      variant: "secondary",
+      theme: ui,
+      width: fullW,
+      onClick: async () => {
+        try {
+          await showPrivacyOptions();
+        } catch (err) {
+          // Em algumas regiões/dispositivos pode não haver formulário disponível
+          console.warn("Opções de privacidade indisponíveis:", err);
+        }
+      },
+    });
   }
 }

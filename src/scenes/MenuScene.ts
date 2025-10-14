@@ -5,6 +5,7 @@ import { MenuButton } from "../ui/MenuButton";
 import { t } from "../i18n";
 import { swapTo } from "../animations/transitions";
 import { hasUnlocked2048 } from "../storage";
+import { showPrivacyOptions } from "../privacy/consent";
 
 // Helpers de robustez
 function killAllTweensOf(scene: Phaser.Scene) {
@@ -148,7 +149,19 @@ export default class MenuScene extends Phaser.Scene {
     );
     ui.add(options);
     y += spacing;
+    const themes = new MenuButton(
+      this,
+      cx,
+      y,
+      t("themes"),
+      () => {
 
+        swapTo(this, "ThemeScene", {}, "fade");
+      },
+      btnWidth
+    );
+    ui.add(themes);
+    y += spacing;
     const exit = new MenuButton(
       this,
       cx,
@@ -198,7 +211,7 @@ export default class MenuScene extends Phaser.Scene {
       this.input.setTopOnly(true);
 
       // Reposiciona sem tween
-      const buttons: any[] = [play, modes, options, exit];
+      const buttons: any[] = [play, modes, themes, options, exit];
       let ly = Math.round(this.scale.height * 0.42);
       const lcx = Math.round(this.scale.width / 2);
       for (const b of buttons) {
@@ -211,7 +224,6 @@ export default class MenuScene extends Phaser.Scene {
       }
       this.tweens.killTweensOf(ui);
       ui.setPosition(0, 0).setAlpha(1).setScale(1);
-
       // E, por via das dúvidas, para de novo qualquer outra cena
       stopOtherScenesSafely(this);
     });
