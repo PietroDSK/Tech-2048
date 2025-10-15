@@ -1,11 +1,12 @@
 // src/scenes/MenuScene.ts
+
+import { MenuButton } from "../ui/MenuButton";
 import Phaser from "phaser";
 import { getTheme } from "../theme";
-import { MenuButton } from "../ui/MenuButton";
-import { t } from "../i18n";
-import { swapTo } from "../animations/transitions";
 import { hasUnlocked2048 } from "../storage";
 import { showPrivacyOptions } from "../privacy/consent";
+import { swapTo } from "../animations/transitions";
+import { t } from "../i18n";
 
 // Helpers de robustez
 function killAllTweensOf(scene: Phaser.Scene) {
@@ -79,7 +80,7 @@ export default class MenuScene extends Phaser.Scene {
       }
     ).setOrigin(0.5);
     ui.add(title);
-
+    title.setResolution(2);
     // Subtítulo
     const subtitle = this.add.text(
       cx,
@@ -92,7 +93,7 @@ export default class MenuScene extends Phaser.Scene {
       }
     ).setOrigin(0.5, 0);
     ui.add(subtitle);
-
+    subtitle.setResolution(2);
     // Botões
     const spacing = 88;
     const btnWidth = Math.min(360, Math.floor(width * 0.84));
@@ -135,6 +136,7 @@ export default class MenuScene extends Phaser.Scene {
         }
       ).setOrigin(0.5, 0);
       ui.add(lockMsg);
+      lockMsg.setResolution(2);
     }
 
     y += spacing;

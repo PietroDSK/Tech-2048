@@ -1,16 +1,18 @@
 // src/native-ads.ts
+
 import {
   AdMob,
   BannerAdOptions,
+  BannerAdPluginEvents,
   BannerAdPosition,
   BannerAdSize,
-  BannerAdPluginEvents,
 } from '@capacitor-community/admob';
+
 import { Capacitor } from '@capacitor/core';
 
 // Use um ID de teste do Google no dev. Troque no release.
-const TEST_BANNER = 'ca-app-pub-8826867524630571/6669912483';
-const Banner = 'ca-app-pub-8826867524630571~8330215188';
+const TEST_BANNER = 'ca-app-pub-8826867524630571/7466971879';
+const Banner = 'ca-app-pub-8826867524630571/7466971879';
 let isShowing = false;
 
 export async function showBannerBottom(adId?: string) {

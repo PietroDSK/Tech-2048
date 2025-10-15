@@ -1,12 +1,3 @@
-import Phaser from "phaser";
-import { Capacitor } from "@capacitor/core";
-
-// Scenes (ajuste conforme seu projeto)
-import MenuScene from "./scenes/MenuScene";
-import GameScene from "./scenes/GameScene";
-import OptionsScene from "./scenes/OptionsScene";
-import ThemeScene from "./scenes/ThemeScene";
-
 // AdMob wrappers
 import {
   initializeAds,
@@ -14,9 +5,17 @@ import {
   prepareRewarded,
   setAdConfig,
 } from "./ads/ads";
-import ModesScene from "./scenes/ModesScene";
-import { PreloadScene } from "./scenes/PreloadScene";
+
 import { BootScene } from "./scenes/BootScene";
+import { Capacitor } from "@capacitor/core";
+import GameScene from "./scenes/GameScene";
+// Scenes (ajuste conforme seu projeto)
+import MenuScene from "./scenes/MenuScene";
+import ModesScene from "./scenes/ModesScene";
+import OptionsScene from "./scenes/OptionsScene";
+import Phaser from "phaser";
+import { PreloadScene } from "./scenes/PreloadScene";
+import ThemeScene from "./scenes/ThemeScene";
 
 /**
  * Boot do app.
@@ -27,9 +26,9 @@ import { BootScene } from "./scenes/BootScene";
 async function boot() {
   // Config de anúncios (troque os IDs no release)
   setAdConfig({
-    // interstitialId: "ca-app-pub-XXXX/YYYY",
-    // rewardedId: "ca-app-pub-XXXX/ZZZZ",
-    testMode: true, // => deixe false no release
+    interstitialId: "ca-app-pub-8826867524630571/6669912483",
+    rewardedId: "ca-app-pub-8826867524630571/5784378638",
+    testMode: false, // => deixe false no release
     requestConsent: true, // UMP (consentimento) quando aplicável
     // forceEEA: true,       // use só para testar fluxo de consentimento
     // testDeviceIds: ["HASH_DO_DEVICE"],
@@ -62,7 +61,8 @@ async function boot() {
     render: {
       antialias: true,
       pixelArt: false,
-      roundPixels: true, // evite arredondar no render global
+      roundPixels: false,
+      mipmapFilter: "LINEAR_MIPMAP_LINEAR" as any, // evite arredondar no render global
     },
     resolution: DPR,
     physics: {

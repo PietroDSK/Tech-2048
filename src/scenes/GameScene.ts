@@ -1,33 +1,22 @@
 // src/scenes/GameScene.ts
-import Phaser from "phaser";
+
 import { getSettings, setUnlocked2048 } from "../storage";
-import { getTheme, getTileColor } from "../theme/index";
-// Animações antigas removidas/otimizadas: tweenTo, mergePulse, zoomPunch, shakeOnMerge, flashWin, scoreFly, burstAt
-import { ensureParticles } from "../animations/particles";
-import { TileTrail } from "../animations/trail";
-import { MenuIcon } from "../ui/MenuIcon";
-import { swapTo } from "../animations/transitions";
-import { getGlobalMusic } from "../audio/MusicSingleton";
+import { getTheme, getTileColor } from "../theme";
 import { hideBanner, showBannerBottom } from "../native-ads";
 import {
-  prepareInterstitial,
-  showInterstitialIfReady,
-  prepareRewarded,
-  showRewardedIfReady,
   onReward,
+  prepareInterstitial,
+  prepareRewarded,
+  showInterstitialIfReady,
+  showRewardedIfReady,
 } from "../ads/ads";
-import { t } from "../i18n";
 
-// >>> Impact Kit
-import {
-  juicyImpact,
-  floatLabel,
-  slowMo,
-  ringPulse,
-  popPunch,
-  cameraKick,
-  confettiBurst,
-} from "../juice/effects";
+import { MenuIcon } from "../ui/MenuIcon";
+import Phaser from "phaser";
+import { TileTrail } from "../animations/trail";
+import { getGlobalMusic } from "../audio/MusicSingleton";
+import { swapTo } from "../animations/transitions";
+import { t } from "../i18n";
 
 // -----------------------------------------------------------------------------
 // Tipos e helpers
@@ -83,12 +72,12 @@ interface SlideResult {
       }
   >;
 }
+
 // -----------------------------------------------------------------------------
-// Botões circulares (Undo / Rewarded)
+// Ícones de botão (vetor sem curvas especiais)
 class CircleIconButton extends Phaser.GameObjects.Container {
   private bg!: Phaser.GameObjects.Arc;
-  private iconTxt?: Phaser.GameObjects.Text;
-  private iconImg?: Phaser.GameObjects.Sprite;
+  private iconVec?: Phaser.GameObjects.Container;
   private badge?: Phaser.GameObjects.Text;
   private hitZone!: Phaser.GameObjects.Zone;
   private radius: number;
@@ -98,11 +87,10 @@ class CircleIconButton extends Phaser.GameObjects.Container {
     x: number,
     y: number,
     radius: number,
-    label: string,
     colors: { fill: string; stroke: string; text: string; glow: string },
     onClick: () => void,
     withBadge = false,
-    sprite?: { key: string; offsetX?: number; offsetY?: number }, // tiramos 'anim' daqui
+    variant: "undo" | "reward" = "undo",
   ) {
     super(scene, x, y);
     scene.add.existing(this);
@@ -121,33 +109,8 @@ class CircleIconButton extends Phaser.GameObjects.Container {
       .setStrokeStyle(2, stroke, 1)
       .setDepth(1);
 
-    if (sprite && scene.textures.exists(sprite.key)) {
-      this.iconImg = scene.add
-        .sprite(0, 0, sprite.key, 0)
-        .setOrigin(0.5)
-        .setDepth(2);
-
-      // encaixa confortavelmente no círculo (com margem)
-      const desired = radius * 2 * 0.86;
-      this.iconImg.setDisplaySize(desired, desired);
-
-      if (sprite.offsetX) this.iconImg.x += sprite.offsetX;
-      if (sprite.offsetY) this.iconImg.y += sprite.offsetY;
-    } else {
-      this.iconTxt = scene.add
-        .text(0, 0, label, {
-          fontFamily: "Arial, Helvetica, sans-serif",
-          fontSize: `${Math.round(radius * 0.95)}px`,
-          color: colors.text,
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5)
-        .setDepth(2);
-    }
-
-    this.add([shadow, this.bg]);
-    if (this.iconImg) this.add(this.iconImg);
-    if (this.iconTxt) this.add(this.iconTxt);
+    this.iconVec = this.buildVectorIcon(variant, stroke);
+    this.add([shadow, this.bg, this.iconVec]);
 
     this.setSize(radius * 2, radius * 2);
 
@@ -162,6 +125,7 @@ class CircleIconButton extends Phaser.GameObjects.Container {
         })
         .setOrigin(0.5)
         .setDepth(3);
+      this.badge.setResolution(2);
       this.add(this.badge);
     }
 
@@ -195,6 +159,30 @@ class CircleIconButton extends Phaser.GameObjects.Container {
       });
     });
 
+    // animações a cada 3s
+    this.scene.time.addEvent({
+      delay: 3000,
+      loop: true,
+      callback: () => {
+        if (variant === "undo") {
+          this.scene.tweens.add({
+            targets: this.iconVec,
+            angle: (this.iconVec!.angle + 360),
+            duration: 700,
+            ease: "cubic.out",
+          });
+        } else {
+          this.scene.tweens.add({
+            targets: this.iconVec,
+            scale: { from: 1, to: 1.12 },
+            yoyo: true,
+            duration: 420,
+            ease: "sine.out",
+          });
+        }
+      },
+    });
+
     this.setDepth(2000);
   }
 
@@ -202,22 +190,92 @@ class CircleIconButton extends Phaser.GameObjects.Container {
     this.badge?.setText(text);
   }
 
-  // TOCAR ANIMAÇÃO 1x A CADA N MILISSEGUNDOS
-  armIdleAnimation(animKey: string, intervalMs = 3000) {
-    if (!this.iconImg) return;
-    this.iconImg.setFrame(0);
-    this.scene.time.addEvent({
-      delay: intervalMs,
-      loop: true,
-      callback: () => {
-        // toca 1x (repeat:0 definido no ensureUiAnims)
-        this.iconImg!.play(animKey, true);
-      },
-    });
+  private buildVectorIcon(
+    variant: "undo" | "reward",
+    strokeColor: number,
+  ): Phaser.GameObjects.Container {
+    const cont = this.scene.add.container(0, 0).setDepth(2);
+    const thick = Math.max(2, Math.round(this.radius * 0.16));
+
+    if (variant === "undo") {
+      // Arco aproximado por segmentos + triângulo da seta
+      const g = this.scene.add.graphics().setDepth(2);
+      g.lineStyle(thick, strokeColor, 1);
+
+      const R = this.radius * 0.62;
+      const steps = 28;
+      const startRad = Phaser.Math.DegToRad(40);
+      const endRad = Phaser.Math.DegToRad(300);
+
+      let prevX = Math.cos(startRad) * R;
+      let prevY = Math.sin(startRad) * R;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const a = Phaser.Math.Linear(startRad, endRad, t);
+        const x = Math.cos(a) * R;
+        const y = Math.sin(a) * R;
+        g.lineBetween(prevX, prevY, x, y);
+        prevX = x;
+        prevY = y;
+      }
+
+      const ax = Math.cos(endRad) * R;
+      const ay = Math.sin(endRad) * R;
+      const s = this.radius * 0.34;
+      const head = this.scene.add.graphics();
+      head.fillStyle(strokeColor, 1);
+      head.fillTriangle(
+        ax,
+        ay,
+        ax - s * 0.85,
+        ay - s * 0.3,
+        ax - s * 0.6,
+        ay + s * 0.7,
+      );
+
+      cont.add([g, head]);
+    } else {
+      // Presente (gift) com retângulos arredondados + triângulos
+      const g = this.scene.add.graphics().setDepth(2);
+      g.lineStyle(thick, strokeColor, 1);
+
+      const w = this.radius * 1.15;
+      const h = this.radius * 0.9;
+      const r = Math.max(3, Math.round(this.radius * 0.22));
+
+      // corpo
+      g.fillStyle(0x000000, 0);
+      g.fillRoundedRect(-w / 2, -h / 2 + 4, w, h, r);
+      g.strokeRoundedRect(-w / 2, -h / 2 + 4, w, h, r);
+
+      // tampa
+      const lid = this.scene.add.graphics();
+      lid.lineStyle(thick, strokeColor, 1);
+      lid.fillStyle(0x000000, 0);
+      lid.fillRoundedRect(-w / 2, -h / 2 - r, w, r * 1.2, r);
+      lid.strokeRoundedRect(-w / 2, -h / 2 - r, w, r * 1.2, r);
+
+      // fita
+      g.lineBetween(0, -h / 2 + 4, 0, h / 2 + 4);
+
+      // laço (triângulos)
+      const bow = this.scene.add.graphics();
+      bow.fillStyle(strokeColor, 1);
+      const bx = 0,
+        by = -h / 2 - r * 0.25;
+      const t = r * 0.9;
+      bow.fillTriangle(bx, by, bx - t * 1.2, by - t * 0.8, bx - t * 1.4, by + t * 0.2);
+      bow.fillTriangle(bx, by, bx + t * 1.2, by - t * 0.8, bx + t * 1.4, by + t * 0.2);
+
+      cont.add([g, lid, bow]);
+    }
+
+    return cont.setSize(this.radius * 2, this.radius * 2);
   }
 }
+
 // -----------------------------------------------------------------------------
-// Cena
+// Cena principal
 export default class GameScene extends Phaser.Scene {
   private mode!: GameMode;
   private cfg!: ModeConfig;
@@ -241,10 +299,9 @@ export default class GameScene extends Phaser.Scene {
   // Objetos/estado
   private tiles = new Map<Id, Phaser.GameObjects.Container>();
   private dragStart?: Phaser.Math.Vector2;
-  private music: any; // mantido flexível para evitar erro de tipo quando MusicManager não é importado
+  private music: any;
   private audioCtx: AudioContext | null = null;
   private score = 0;
-  private best = 0;
   private reached2048 = false;
   private failedRuns = 0;
 
@@ -265,22 +322,6 @@ export default class GameScene extends Phaser.Scene {
     super("GameScene");
   }
 
-  preload() {
-    // ...seu preload (se houver)
-    this.load.spritesheet("icoUndo", "assets/ui/undo_spin_spritesheet.png", {
-      frameWidth: 256,
-      frameHeight: 256,
-    });
-    this.load.spritesheet(
-      "icoReward",
-      "assets/ui/reward_pulse_spritesheet.png",
-      {
-        frameWidth: 256,
-        frameHeight: 256,
-      },
-    );
-  }
-
   create(data: GameModeData) {
     this.theme = getTheme();
     this.input.setTopOnly(true);
@@ -289,10 +330,9 @@ export default class GameScene extends Phaser.Scene {
     this.rows = this.cfg.rows;
     this.cols = this.cfg.cols;
 
-    ensureParticles(this); // garante textura 'spark' para confettiBurst
-    this.registry.set("score", 0);
-
+    // trilha (um pouco mais rápida e translúcida)
     this.data.set("tileTrail", new TileTrail(this));
+
     new MenuIcon(this, this.scale.width - 30, 30);
 
     this.setupLayoutAndGrid();
@@ -323,15 +363,9 @@ export default class GameScene extends Phaser.Scene {
         if (ctx && ctx.state !== "running") await ctx.resume();
 
         if (this.settings.music !== false) {
-          // PEGA A MESMA INSTÂNCIA SEMPRE
           this.music = getGlobalMusic(this);
-          // reanexa a cena (seu MusicManager agora tem attach())
           (this.music as any).attach?.(this);
-
-          // inicia só na primeira vez
-          if (!(this.music as any).isStarted?.()) {
-            this.music.init?.();
-          }
+          if (!(this.music as any).isStarted?.()) this.music.init?.();
           this.music.updateByScore?.(this.score);
         }
 
@@ -342,47 +376,15 @@ export default class GameScene extends Phaser.Scene {
       }
     };
 
-    // Chame o boot no primeiro input (iOS/web)
     this.input.once("pointerdown", bootAudio);
     this.input.keyboard?.once("keydown", bootAudio);
-  }
 
-  private ensureUiAnims() {
-    // Smoothing nos ícones mesmo que o jogo use pixelArt:true
-    const Filter = Phaser.Textures.FilterMode;
-    this.textures.get("icoUndo")?.setFilter?.(Filter.LINEAR);
-    this.textures.get("icoReward")?.setFilter?.(Filter.LINEAR);
-
-    // Animações tocam 1x (repeat:0); o loop a cada 3s vamos agendar por timer
-    if (!this.anims.exists("ui-undo-spin")) {
-      this.anims.create({
-        key: "ui-undo-spin",
-        frames: this.anims.generateFrameNumbers("icoUndo", {
-          start: 0,
-          end: 7,
-        }),
-        frameRate: 12,
-        repeat: 0,
-      });
-    }
-    if (!this.anims.exists("ui-reward-pulse")) {
-      this.anims.create({
-        key: "ui-reward-pulse",
-        frames: this.anims.generateFrameNumbers("icoReward", {
-          start: 0,
-          end: 7,
-        }),
-        frameRate: 10,
-        yoyo: true,
-        repeat: 0,
-      });
-    }
+    this.hookAppLifecycle();
   }
 
   // ---------------------------------------------------------------------------
-  // Header (título à esquerda, botões circulares à direita)
+  // Header (título + botões)
   private paintHeaderHud() {
-    this.ensureUiAnims();
     const { width } = this.scale;
     const c = this.theme.colors;
 
@@ -396,14 +398,15 @@ export default class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5);
     title.setShadow(0, 0, c.glow, 16, true, true);
+    title.setResolution(2);
 
     const sub = this.add
       .text(
         this.sideMargin + 10,
         headerY + 22,
-        `${this.mode.toUpperCase()} • ${this.rows}x${this.cols} • ${t(
-          "goal",
-        )}: ${this.cfg.endless ? "∞" : this.cfg.target}`,
+        `${this.mode.toUpperCase()} • ${this.rows}x${this.cols} • ${t("goal")}: ${
+          this.cfg.endless ? "∞" : this.cfg.target
+        }`,
         {
           fontFamily: "Arial, Helvetica, sans-serif",
           fontSize: "13px",
@@ -412,8 +415,8 @@ export default class GameScene extends Phaser.Scene {
       )
       .setOrigin(0, 0.5)
       .setAlpha(0.95);
+    sub.setResolution(2);
 
-    // Botões circulares à direita
     const right = width - this.sideMargin - 8;
     const radius = 18;
 
@@ -422,26 +425,18 @@ export default class GameScene extends Phaser.Scene {
       right - radius,
       headerY,
       radius,
-      "↩",
       { fill: c.surfaceAlt, stroke: c.primary, text: c.text, glow: c.primary },
       () => this.tryUndo(),
       true,
-      { key: "icoUndo" },
+      "undo",
     );
-    this.undoBtn.armIdleAnimation("ui-undo-spin", 3000); // <- roda a cada 3s
 
     this.rewardBtn = new CircleIconButton(
       this,
       right - radius,
       headerY - (radius * 2 + 10),
       radius * 0.9,
-      "🎁",
-      {
-        fill: c.surfaceAlt,
-        stroke: c.gridHighlight,
-        text: c.text,
-        glow: c.primary,
-      },
+      { fill: c.surfaceAlt, stroke: c.gridHighlight, text: c.text, glow: c.primary },
       async () => {
         const shown = await showRewardedIfReady();
         if (!shown) {
@@ -450,9 +445,8 @@ export default class GameScene extends Phaser.Scene {
         }
       },
       false,
-      { key: "icoReward" },
+      "reward",
     );
-    this.rewardBtn.armIdleAnimation("ui-reward-pulse", 3000);
 
     this.add.existing(this.undoBtn);
     this.add.existing(this.rewardBtn);
@@ -502,11 +496,6 @@ export default class GameScene extends Phaser.Scene {
     const y = this.boardY + this.gap + r * (this.cellSize + this.gap);
     return { x, y };
   }
-  private cellLocalXY(r: number, c: number) {
-    const x = this.gap + c * (this.cellSize + this.gap);
-    const y = this.gap + r * (this.cellSize + this.gap);
-    return { x, y };
-  }
 
   private drawBoardBg() {
     const c = this.theme.colors;
@@ -546,7 +535,6 @@ export default class GameScene extends Phaser.Scene {
       .setBlendMode(Phaser.BlendModes.ADD)
       .setAlpha(0.7);
 
-    // Apenas um fio externo suave (sem inner border)
     const W = this.getBoardWidth(),
       H = this.getBoardHeight();
     fx.lineStyle(
@@ -559,7 +547,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // Tiles (com sombra)
+  // Tiles (cor chapada + legibilidade garantida)
   private spawnRandomTile(): boolean {
     const empty: Array<{ r: number; c: number }> = [];
     for (let r = 0; r < this.rows; r++)
@@ -576,89 +564,79 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private createTile(id: Id, r: number, c: number, value: number, pop = false) {
-    const tc = this.theme.colors;
+    const tcol = this.theme.colors;
     const { x, y } = this.cellXY(r, c);
+
     const cont = this.add.container(x, y).setDepth(1);
-    cont.setScale(1); // <- antes era 0.6
+    const core = this.add.container(this.cellSize / 2, this.cellSize / 2);
 
-    const fillHex = Phaser.Display.Color.HexStringToColor(
-      getTileColor(value),
-    ).color;
+    const w = this.cellSize,
+      h = this.cellSize;
 
-    // sombra (drop) do tile
+    // sombra
     const shadow = this.add.graphics();
     shadow
       .fillStyle(0x000000, 0.35)
-      .fillRoundedRect(
-        this.cellSize * 0.06,
-        this.cellSize * 0.1,
-        this.cellSize * 0.9,
-        this.cellSize * 0.9,
-        12,
-      )
-      .setScale(1.02, 1.05)
+      .fillRoundedRect(-w * 0.45, -h * 0.4, w * 0.9, h * 0.9, 12)
       .setAlpha(0.35)
       .setBlendMode(Phaser.BlendModes.MULTIPLY);
 
-    // corpo do tile
-    const body = this.add.graphics();
-    body
-      .fillStyle(fillHex, 1)
-      .fillRoundedRect(0, 0, this.cellSize, this.cellSize, 12)
-      .lineStyle(2, Phaser.Display.Color.HexStringToColor(tc.primary).color, 1)
-      .strokeRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
+    // cor chapada (ajustada para contraste com a superfície)
+    const baseHex = getTileColor(value) || tcol.primary || "#66b8e0";
+    const fillHex = adjustColorForSurface(baseHex, tcol.surface, 2.2);
+    const fillInt = Phaser.Display.Color.HexStringToColor(fillHex).color;
 
+    const body = this.add.graphics();
+    body.fillStyle(fillInt, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 12);
+
+    // borda
+    const border = this.add.graphics();
+    border
+      .lineStyle(2, Phaser.Display.Color.HexStringToColor(tcol.primary).color, 1)
+      .strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
+
+    // texto (auto claro/escuro)
+    const txtColor = readableTextColor(fillHex, "#FFFFFF", "#0B0F14");
     const txt = this.add
-      .text(this.cellSize / 2, this.cellSize / 2, String(value), {
+      .text(0, 0, String(value), {
         fontFamily: "Arial, Helvetica, sans-serif",
         fontSize: `${Math.floor(this.cellSize * 0.38)}px`,
-        color: value <= 4 ? tc.text : tc.bg,
+        color: txtColor,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
-    txt.setShadow(0, 0, tc.glow, 10, true, true);
+    txt.setResolution(2);
+    if (txtColor === "#FFFFFF") txt.setShadow(0, 0, tcol.glow, 6, true, true);
+    else txt.setShadow(0, 0, "#000000", 2, true, true);
 
-    cont.add([shadow, body, txt]);
+    core.add([shadow, body, border, txt]);
+    cont.add(core);
+
+    cont.setData("core", core);
     cont.setData("body", body);
     cont.setData("txt", txt);
 
     this.tiles.set(id, cont);
 
+    // POP do centro (apenas um anel de borda)
     if (pop) {
-      // 1) tween de spawn até scale 1.0
-      cont.setScale(0.2);
+      const pulse = this.add.graphics();
+      pulse
+        .lineStyle(3, Phaser.Display.Color.HexStringToColor(tcol.primary).color, 0.9)
+        .strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
+      core.add(pulse);
+      pulse.setScale(1.15);
       this.tweens.add({
-        targets: cont,
-        scaleX: 1.05,
-        scaleY: 0.95,
-        duration: 110,
-        ease: "back.out(2.4)",
-        onComplete: () => {
-          this.tweens.add({
-            targets: cont,
-            scaleX: 1.0,
-            scaleY: 1.0,
-            duration: 80,
-            ease: "sine.out",
-          });
-        },
+        targets: pulse,
+        scale: 1.0,
+        alpha: { from: 0.9, to: 0 },
+        duration: 240,
+        ease: "Cubic.Out",
+        onComplete: () => pulse.destroy(),
       });
 
-      // 2) efeitos visuais (anel) já no spawn
-      ringPulse(
-        this,
-        x + this.cellSize / 2,
-        y + this.cellSize / 2,
-        0xffffff,
-        14,
-        180,
-      );
-
-      // 3) pequeno punch DEPOIS do spawn (evita yoyo voltar para 0.2)
-      this.time.delayedCall(200, () => {
-        // popPunch agora aceita delay/yoyo por opts, mas aqui mantemos padrão
-        popPunch(this, cont, 0.06, 110);
-      });
+      // ring visual adicional
+      ringPulse(this, x + w / 2, y + h / 2, 0xffffff, 14, 200);
     }
   }
 
@@ -795,7 +773,7 @@ export default class GameScene extends Phaser.Scene {
       const idAtTo = outIds[to];
       if (idAtTo === 0) continue;
       const from = origPos[idAtTo];
-      ops.push({ type: "move", id: idAtTo as number, from, to });
+      if (from !== to) ops.push({ type: "move", id: idAtTo as number, from, to });
     }
     for (const op of ops)
       if (op.type === "merge") {
@@ -866,10 +844,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (!anyMoved) {
-      // toque sutil quando bate na parede
-      cameraKick(this, 90, 0.004);
-      this.cameras.main.shake(120, 0.004);
+      // sem movimento: efeitinho leve e som de bump
       this.playBumpSfx();
+      tinyBump(this); // leve zoom da câmera
       return;
     }
 
@@ -899,7 +876,6 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // Animações com path/curva leve e squash
   private animateOps(
     allOps: Array<{
       axis: "row" | "col";
@@ -932,7 +908,7 @@ export default class GameScene extends Phaser.Scene {
       const tweens: Phaser.Tweens.Tween[] = [];
       const toComplete: Phaser.Tweens.Tween[] = [];
 
-      // Moves com duração proporcional à distância
+      // Moves com duração proporcional + 140ms extras (mais fluido/lento)
       for (const g of allOps)
         for (const op of g.ops)
           if (op.type === "move") {
@@ -943,14 +919,19 @@ export default class GameScene extends Phaser.Scene {
             const dx = tx - cont.x,
               dy = ty - cont.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            const dur = Phaser.Math.Clamp(60 + dist * 0.5, 90, 170);
+            if (dist < 0.5) {
+              cont.setPosition(tx, ty);
+              continue;
+            }
 
-            // squash ao iniciar e ao parar
+            const dur = Phaser.Math.Clamp(60 + dist * 0.5 + 140, 160, 340);
+
+            const core = (cont.getData("core") as Phaser.GameObjects.Container) ?? cont;
             this.tweens.add({
-              targets: cont,
+              targets: core,
               scaleX: 0.96,
               scaleY: 1.04,
-              duration: 70,
+              duration: 130,
               ease: "sine.out",
             });
 
@@ -963,10 +944,10 @@ export default class GameScene extends Phaser.Scene {
               onUpdate: () => trail?.addSnapshot(cont),
               onComplete: () => {
                 this.tweens.add({
-                  targets: cont,
+                  targets: core,
                   scaleX: 1.0,
                   scaleY: 1.0,
-                  duration: 70,
+                  duration: 130,
                   ease: "sine.out",
                 });
               },
@@ -974,7 +955,7 @@ export default class GameScene extends Phaser.Scene {
             tweens.push(tw);
           }
 
-      // Merges – curva de atração + Impact Kit
+      // Merges (curva leve via Path) + efeitos e SOM (todos os merges)
       for (const g of allOps)
         for (const op of g.ops)
           if (op.type === "merge") {
@@ -983,64 +964,57 @@ export default class GameScene extends Phaser.Scene {
             const B = this.tiles.get(op.consumedId);
             if (!A || !B) continue;
 
+            // som em todos os merges
+            this.playMergeSfx(op.newValue);
+
             const { x: tx, y: ty } = rcToXY(to.r, to.c);
             const cx = tx + this.cellSize / 2,
               cy = ty + this.cellSize / 2;
 
-            // curva curta (meio deslocado) para dar sensação de "ímã"
             const midX = (A.x + tx) / 2 + (Math.random() * 8 - 4);
             const midY = (A.y + ty) / 2 + (Math.random() * 8 - 4);
 
             const applyMerge = () => {
+              const tcol = this.theme.colors;
               const body = A.getData("body") as
                 | Phaser.GameObjects.Graphics
                 | undefined;
               const txt = A.getData("txt") as
                 | Phaser.GameObjects.Text
                 | undefined;
-              const color = Phaser.Display.Color.HexStringToColor(
-                getTileColor(op.newValue),
-              ).color;
+
+              const baseHex = getTileColor(op.newValue) || tcol.primary || "#66b8e0";
+              const fillHex = adjustColorForSurface(baseHex, tcol.surface, 2.2);
+              const fillInt = Phaser.Display.Color.HexStringToColor(fillHex).color;
 
               if (body) {
                 body.clear();
                 body
-                  .fillStyle(color, 1)
-                  .fillRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
-                body.lineStyle(
-                  2,
-                  Phaser.Display.Color.HexStringToColor(
-                    this.theme.colors.primary,
-                  ).color,
-                  1,
-                );
-                body.strokeRoundedRect(0, 0, this.cellSize, this.cellSize, 12);
+                  .fillStyle(fillInt, 1)
+                  .fillRoundedRect(
+                    -this.cellSize / 2,
+                    -this.cellSize / 2,
+                    this.cellSize,
+                    this.cellSize,
+                    12,
+                  );
               }
               if (txt) {
-                txt.setText(String(op.newValue));
-                txt.setColor(
-                  op.newValue <= 4
-                    ? this.theme.colors.text
-                    : this.theme.colors.bg,
-                );
+                const cTxt = readableTextColor(fillHex, "#FFFFFF", "#0B0F14");
+                txt.setText(String(op.newValue)).setColor(cTxt).setResolution(2);
+                if (cTxt === "#FFFFFF")
+                  txt.setShadow(0, 0, tcol.glow, 6, true, true);
+                else txt.setShadow(0, 0, "#000000", 2, true, true);
               }
 
-              // Impact Kit (combo): punch + ring + camera + confetti
-              juicyImpact(this, cx, cy, A);
-              floatLabel(this, cx, cy - 12, `+${op.newValue}`, "#ffe066");
-
-              // Efeito extra em merges grandes
-              if (op.newValue >= 1024) {
-                slowMo(this, 0.85, 120);
-                confettiBurst(this, cx, cy, "spark");
-              }
-
+              // efeitos simples
+              impactEffect(this, cx, cy, (A.getData("core") as Phaser.GameObjects.Container) ?? A, op.newValue, this.theme.colors.primary);
+              floatLabel(this, cx, cy - 12, `+${op.newValue}`, "#9be1ff");
+              if (op.newValue >= 1024) slowMo(this, 0.85, 120);
               this.onMerge(op.newValue);
-              this.playMergeSfx(op.newValue);
             };
 
-            // A vai direto; B faz curva e some
-            const dur = 120;
+            const dur = 240;
             this.tweens.add({
               targets: A,
               x: tx,
@@ -1049,6 +1023,7 @@ export default class GameScene extends Phaser.Scene {
               ease: "quart.out",
             });
 
+            // path para B (curvadinho). Path.cubicBezierTo existe em Phaser 3
             const path = new Phaser.Curves.Path(B.x, B.y);
             path.cubicBezierTo(midX, midY, tx, ty, tx, ty);
             const follower: any = { t: 0, vec: new Phaser.Math.Vector2() };
@@ -1060,9 +1035,7 @@ export default class GameScene extends Phaser.Scene {
               onUpdate: () => {
                 path.getPoint(follower.t, follower.vec);
                 B.setPosition(follower.vec.x, follower.vec.y);
-                (
-                  this.data.get("tileTrail") as TileTrail | undefined
-                )?.addSnapshot(B);
+                (this.data.get("tileTrail") as TileTrail | undefined)?.addSnapshot(B);
               },
               onComplete: () => {
                 B.destroy(true);
@@ -1106,6 +1079,7 @@ export default class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setAlpha(0);
+    toast.setResolution(2);
     this.tweens.add({
       targets: toast,
       alpha: 1,
@@ -1116,7 +1090,6 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // Substitui a antiga
   private playMergeSfx(value: number) {
     if (!this.settings.sound) return;
     try {
@@ -1126,25 +1099,24 @@ export default class GameScene extends Phaser.Scene {
       const ctx = this.audioCtx!;
       const now = ctx.currentTime;
 
-      // Pitch escala por valor (mantém tua lógica)
-      const step = Math.max(0, Math.log2(value) - 1); // 2->0, 4->1, 8->2...
+      const step = Math.max(0, Math.log2(value) - 1);
       const base = 220;
-      const freq = base * Math.pow(1.12246, step); // ~semitom
+      const freq = base * Math.pow(1.12246, step);
 
-      // Camada 1: beep “musical”
       const osc = ctx.createOscillator();
       osc.type = "triangle";
       osc.frequency.setValueAtTime(freq, now);
 
       const g = ctx.createGain();
-      const A = 0.005,
+      const A = 0.01,
         D = 0.12;
       g.gain.setValueAtTime(0.0001, now);
       g.gain.exponentialRampToValueAtTime(0.18, now + A);
       g.gain.exponentialRampToValueAtTime(0.0001, now + A + D);
+
       osc.connect(g).connect(ctx.destination);
 
-      // Camada 2: “pop” curto (ruído filtrado) para dar ataque
+      // "click" percussivo breve (ruído)
       const noiseBuf = ctx.createBuffer(
         1,
         Math.floor(ctx.sampleRate * 0.02),
@@ -1152,21 +1124,16 @@ export default class GameScene extends Phaser.Scene {
       );
       const ch = noiseBuf.getChannelData(0);
       for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * 0.8;
-
       const noise = ctx.createBufferSource();
       noise.buffer = noiseBuf;
-
       const hp = ctx.createBiquadFilter();
       hp.type = "highpass";
       hp.frequency.setValueAtTime(1200, now);
-
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.18, now);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-
       noise.connect(hp).connect(ng).connect(ctx.destination);
 
-      // Dispara
       osc.start(now);
       noise.start(now);
       osc.stop(now + A + D + 0.02);
@@ -1174,7 +1141,6 @@ export default class GameScene extends Phaser.Scene {
     } catch {}
   }
 
-  // NOVO: som de “batida” quando não há movimento no swipe
   private playBumpSfx() {
     if (!this.settings.sound) return;
     try {
@@ -1184,7 +1150,6 @@ export default class GameScene extends Phaser.Scene {
       const ctx = this.audioCtx!;
       const now = ctx.currentTime;
 
-      // Dois sines graves para “thud”
       const freqs = [160, 90];
       const total = 0.15;
       for (const f of freqs) {
@@ -1200,7 +1165,7 @@ export default class GameScene extends Phaser.Scene {
         o.stop(now + total + 0.02);
       }
 
-      // “tick” curtíssimo (ruído low-pass) pra dar definição
+      // ruído abafado
       const noiseBuf = ctx.createBuffer(
         1,
         Math.floor(ctx.sampleRate * 0.02),
@@ -1208,18 +1173,14 @@ export default class GameScene extends Phaser.Scene {
       );
       const ch = noiseBuf.getChannelData(0);
       for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * 0.7;
-
       const src = ctx.createBufferSource();
       src.buffer = noiseBuf;
-
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.frequency.setValueAtTime(300, now);
-
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.12, now);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-
       src.connect(lp).connect(ng).connect(ctx.destination);
       src.start(now);
       src.stop(now + 0.08);
@@ -1258,23 +1219,20 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(1002)
       .setScrollFactor(0);
+    msg.setResolution(2);
 
     const btnTry = this.add
-      .text(
-        width / 2,
-        height / 2 + 34,
-        win ? t("continue_endless") : t("retry"),
-        {
-          fontFamily: "Arial, Helvetica, sans-serif",
-          fontSize: "18px",
-          color: c.bg,
-          backgroundColor: c.primary,
-          padding: { x: 16, y: 10 },
-        },
-      )
+      .text(width / 2, height / 2 + 34, win ? t("continue_endless") : t("retry"), {
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "18px",
+        color: c.bg,
+        backgroundColor: c.primary,
+        padding: { x: 16, y: 10 },
+      })
       .setOrigin(0.5)
       .setDepth(1002)
       .setInteractive({ useHandCursor: true });
+    btnTry.setResolution(2);
     btnTry.on("pointerup", () => {
       this.tweens.add({
         targets: [box, msg, btnTry, btnMenu],
@@ -1308,6 +1266,7 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(1002)
       .setInteractive({ useHandCursor: true });
+    btnMenu.setResolution(2);
     btnMenu.on("pointerup", () => {
       this.tweens.add({
         targets: [box, msg, btnTry, btnMenu],
@@ -1402,8 +1361,220 @@ export default class GameScene extends Phaser.Scene {
       prepareInterstitial();
     }
   }
+
+  private hookAppLifecycle() {
+    const pause = () => {
+      try {
+        (this.music as any)?.pause?.();
+        (this.sound as any).context?.suspend?.();
+      } catch {}
+    };
+    const resume = () => {
+      try {
+        (this.sound as any).context?.resume?.();
+        (this.music as any)?.resume?.();
+      } catch {}
+    };
+    this.game.events.on(Phaser.Core.Events.BLUR, pause, this);
+    this.game.events.on(Phaser.Core.Events.HIDDEN, pause, this);
+    this.game.events.on(Phaser.Core.Events.PAUSE, pause, this);
+    this.game.events.on(Phaser.Core.Events.FOCUS, resume, this);
+    this.game.events.on(Phaser.Core.Events.VISIBLE, resume, this);
+    this.game.events.on(Phaser.Core.Events.RESUME, resume, this);
+    document.addEventListener("visibilitychange", () => {
+      document.hidden ? pause() : resume();
+    });
+  }
+
   shutdown() {
     hideBanner().catch(() => {});
   }
   destroy() {}
+}
+
+// -----------------------------------------------------------------------------
+// ==== Mini efeitos utilitários (sem dependências externas) ====
+
+// pulse de anel simples
+function ringPulse(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  color: number,
+  radius: number,
+  duration = 200,
+) {
+  const ring = scene.add.circle(x, y, radius * 0.5, color, 0.18).setDepth(2);
+  scene.tweens.add({
+    targets: ring,
+    radius: radius * 1.6,
+    alpha: 0,
+    duration,
+    ease: "quad.out",
+    onComplete: () => ring.destroy(),
+  });
+}
+
+// texto flutuante
+function floatLabel(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  text: string,
+  color = "#ffffff",
+) {
+  const lbl = scene.add
+    .text(x, y, text, {
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontSize: "14px",
+      color,
+      fontStyle: "bold",
+    })
+    .setOrigin(0.5);
+  lbl.setResolution(2);
+  scene.tweens.add({
+    targets: lbl,
+    y: y - 18,
+    alpha: { from: 1, to: 0 },
+    duration: 500,
+    ease: "sine.out",
+    onComplete: () => lbl.destroy(),
+  });
+}
+
+// leve slow motion
+function slowMo(scene: Phaser.Scene, scale = 0.85, ms = 120) {
+  const cam = scene.cameras.main;
+  const old = cam.timeScale ?? 1;
+  cam.timeScale = scale;
+  scene.time.delayedCall(ms, () => (cam.timeScale = old));
+}
+
+// impacto visual no merge
+function impactEffect(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  target: Phaser.GameObjects.GameObject,
+  value: number,
+  ringHex: string,
+) {
+  const ringCol = Phaser.Display.Color.HexStringToColor(ringHex).color;
+  const magnitude = Phaser.Math.Clamp((Math.log2(value) - 1) * 0.015, 0.01, 0.05);
+  scene.cameras.main.shake(120, magnitude);
+  ringPulse(scene, x, y, ringCol, 18 + Math.min(24, Math.log2(value) * 2), 220);
+
+  scene.tweens.add({
+    targets: target as any,
+    scaleX: { from: 1.0, to: 1.07 },
+    scaleY: { from: 1.0, to: 0.94 },
+    yoyo: true,
+    duration: 140,
+    ease: "sine.out",
+  });
+}
+
+// bump bem leve quando não move
+function tinyBump(scene: Phaser.Scene) {
+  const cam = scene.cameras.main;
+  const ox = cam.x,
+    oy = cam.y;
+  scene.tweens.addCounter({
+    from: 0,
+    to: 1,
+    duration: 100,
+    yoyo: true,
+    onUpdate: (tw) => {
+      const v = (tw.getValue() as number) * 1.2;
+      cam.setScroll(ox + v, oy);
+    },
+    onComplete: () => cam.setScroll(ox, oy),
+  });
+}
+
+// -----------------------------------------------------------------------------
+// ==== Helpers de cor/contraste robustos (sem gradiente) ====
+type RGB = { r: number; g: number; b: number };
+
+function parseHex(input: any): RGB {
+  if (typeof input !== "string") return { r: 0, g: 0, b: 0 };
+  let hex = input.trim();
+  if (hex.startsWith("0x")) hex = "#" + hex.slice(2);
+  const short = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(hex);
+  if (short) {
+    return {
+      r: parseInt(short[1] + short[1], 16),
+      g: parseInt(short[2] + short[2], 16),
+      b: parseInt(short[3] + short[3], 16),
+    };
+  }
+  const long = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (long) {
+    return {
+      r: parseInt(long[1], 16),
+      g: parseInt(long[2], 16),
+      b: parseInt(long[3], 16),
+    };
+  }
+  return { r: 0, g: 0, b: 0 };
+}
+function toHex(c: RGB): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  const h = (n: number) => clamp(n).toString(16).padStart(2, "0");
+  return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
+}
+function lighten(hex: string, pct: number) {
+  const c = parseHex(hex);
+  const f = pct / 100;
+  return toHex({
+    r: c.r + (255 - c.r) * f,
+    g: c.g + (255 - c.g) * f,
+    b: c.b + (255 - c.b) * f,
+  });
+}
+function darken(hex: string, pct: number) {
+  const c = parseHex(hex);
+  const f = 1 - pct / 100;
+  return toHex({ r: c.r * f, g: c.g * f, b: c.b * f });
+}
+function srgbToLin(c: number) {
+  const v = Math.max(0, Math.min(255, c)) / 255;
+  return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+function luminance(hex: string) {
+  const { r, g, b } = parseHex(hex);
+  const R = srgbToLin(r),
+    G = srgbToLin(g),
+    B = srgbToLin(b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+function contrastRatio(a: string, b: string) {
+  const L1 = luminance(a),
+    L2 = luminance(b);
+  const hi = Math.max(L1, L2),
+    lo = Math.min(L1, L2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+/** Ajusta a cor do tile se estiver muito parecida com a superfície. */
+function adjustColorForSurface(tileHex: string, surfaceHex: string, min = 2.0) {
+  let out = tileHex || "#666666";
+  let tries = 0;
+
+  if (contrastRatio(out, surfaceHex) >= min) return out;
+
+  const tileIsDarker = luminance(out) < luminance(surfaceHex);
+  while (contrastRatio(out, surfaceHex) < min && tries++ < 10) {
+    out = tileIsDarker ? lighten(out, 6) : darken(out, 6);
+  }
+  return out;
+}
+/** Escolhe cor clara/escura de texto para legibilidade. */
+function readableTextColor(
+  bgHex: string,
+  light = "#FFFFFF",
+  dark = "#0B0F14",
+) {
+  const cLight = contrastRatio(light, bgHex);
+  const cDark = contrastRatio(dark, bgHex);
+  return cLight >= cDark ? light : dark;
 }

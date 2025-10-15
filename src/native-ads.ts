@@ -1,11 +1,12 @@
-import { Capacitor } from '@capacitor/core'
 import {
   AdMob,
   BannerAdOptions,
-  BannerAdSize,
   BannerAdPosition,
+  BannerAdSize,
   RewardInterstitialAdOptions,
 } from '@capacitor-community/admob'
+
+import { Capacitor } from '@capacitor/core'
 
 const TEST_BANNER_UNIT = 'ca-app-pub-3940256099942544/6300978111'
 const TEST_INTERSTITIAL_UNIT = 'ca-app-pub-3940256099942544/1033173712'
@@ -26,7 +27,7 @@ export async function initAdMob() {
 export async function showBannerBottom(unitId?: string) {
   if (!isNative()) return
   const options: BannerAdOptions = {
-    adId: unitId ?? TEST_BANNER_UNIT,
+    adId: 'ca-app-pub-8826867524630571/7466971879',
     adSize: BannerAdSize.SMART_BANNER,
     position: BannerAdPosition.BOTTOM_CENTER,
     margin: 0,
@@ -45,7 +46,7 @@ export async function maybeShowInterstitialEvery(freq = 3, unitId?: string) {
   localStorage.setItem(KEY_ATTEMPTS, String(n))
   if (n % freq !== 0) return
 
-  const opts: RewardInterstitialAdOptions = { adId: unitId ?? TEST_INTERSTITIAL_UNIT }
+  const opts: RewardInterstitialAdOptions = { adId: 'ca-app-pub-8826867524630571/6669912483' }
   await AdMob.prepareInterstitial(opts)
   await AdMob.showInterstitial()
 }

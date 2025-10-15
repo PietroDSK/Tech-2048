@@ -1,4 +1,5 @@
 // src/juice/effects.ts
+
 import Phaser from "phaser";
 
 type AnyGO = Phaser.GameObjects.GameObject & {
@@ -9,7 +10,7 @@ type AnyGO = Phaser.GameObjects.GameObject & {
   postFX?: any;
 };
 
-/** Anel que expande e desaparece (compatível com Phaser 3 e 4) */
+/** Anel que expande e desaparece */
 export function ringPulse(
   scene: Phaser.Scene,
   x: number,
@@ -32,7 +33,7 @@ export function ringPulse(
   });
 }
 
-/** Mini “punch” elástico no alvo. */
+/** Mini “punch” elástico no alvo */
 export function popPunch(
   scene: Phaser.Scene,
   target: AnyGO,
@@ -52,31 +53,21 @@ export function popPunch(
     ease: "Back.Out",
   });
 
-  // Glow opcional (se o runtime tiver FX). Ignora em Canvas/sem suporte.
+  // Glow opcional (quando suportado)
   try {
-    const fx = (target as any).postFX?.addGlow?.(0xffff99, 2, 0, false, 0.5, 6);
-    if (fx) {
-      scene.time.delayedCall((opts?.delay ?? 0) + duration + 80, () => fx.destroy());
-    }
+    const fx = (target as any).postFX?.addGlow?.(0x9be1ff, 2, 0, false, 0.5, 6);
+    if (fx) scene.time.delayedCall((opts?.delay ?? 0) + duration + 80, () => fx.destroy());
   } catch {}
 
   return tw;
 }
 
-/** Chacoalhada rápida de câmera (micro impacto). */
-export function cameraKick(
-  scene: Phaser.Scene,
-  duration = 90,
-  intensity = 0.004
-) {
-  try {
-    scene.cameras.main.shake(duration, intensity);
-  } catch {
-    // Em casos raros sem main camera configurada, ignore silenciosamente
-  }
+/** Chacoalhada rápida de câmera */
+export function cameraKick(scene: Phaser.Scene, duration = 90, intensity = 0.004) {
+  try { scene.cameras.main.shake(duration, intensity); } catch {}
 }
 
-/** Label flutuando que sobe e some (ex.: +256). */
+/** Label flutuante (ex.: +256) */
 export function floatLabel(
   scene: Phaser.Scene,
   x: number,
@@ -104,17 +95,15 @@ export function floatLabel(
   });
 }
 
-/** Breve “bullet-time” global via timeScale. */
+/** Breve “bullet-time” global */
 export function slowMo(scene: Phaser.Scene, factor = 0.5, ms = 250) {
   const t = scene.time;
   const prev = t.timeScale ?? 1;
   t.timeScale = factor;
-  scene.time.delayedCall(ms, () => {
-    t.timeScale = prev;
-  });
+  scene.time.delayedCall(ms, () => { t.timeScale = prev; });
 }
 
-/** Confete sem usar ParticleEmitter (funciona no Phaser 3 e 4). */
+/** Confete sem ParticleEmitter (Phaser 3/4 safe) */
 export function confettiBurst(
   scene: Phaser.Scene,
   x: number,
@@ -122,7 +111,6 @@ export function confettiBurst(
   textureKey = "spark",
   count = 28
 ) {
-  // Fallback: gera textura 4x4 caso não exista
   if (!scene.textures.exists(textureKey)) {
     const g = scene.add.graphics();
     g.fillStyle(0xffffff, 1).fillRect(0, 0, 4, 4);
@@ -148,7 +136,7 @@ export function confettiBurst(
     scene.tweens.add({
       targets: spr,
       x: x + dx,
-      y: y + dy + Phaser.Math.Between(160, 260), // queda simulada
+      y: y + dy + Phaser.Math.Between(160, 260),
       rotation: Phaser.Math.FloatBetween(-1.5, 1.5),
       alpha: { from: 1, to: 0 },
       scale: { from: spr.scale, to: 0 },
@@ -159,16 +147,40 @@ export function confettiBurst(
   }
 }
 
-/** Combo pronto para “ações importantes” (ex.: merge). */
-export function juicyImpact(
+/** Impacto “genérico” (compat) */
+export function juicyImpact(scene: Phaser.Scene, x: number, y: number, target?: AnyGO) {
+  if (target) popPunch(scene, target, 0.10, 120, { yoyo: true });
+  ringPulse(scene, x, y, 0x9be1ff, 16, 180);
+  confettiBurst(scene, x, y, "spark", 16);
+  cameraKick(scene, 90, 0.0035);
+}
+
+/** Impacto que escala com o valor do merge (sempre toca/animam) */
+export function impactByValue(
   scene: Phaser.Scene,
   x: number,
   y: number,
-  target?: AnyGO
+  target: AnyGO | undefined,
+  value: number,
+  opts?: { color?: number }
 ) {
-  if (target) popPunch(scene, target, 0.10, 120, { yoyo: true });
-  ringPulse(scene, x, y, 0xffe066, 16, 180);
-  cameraKick(scene, 90, 0.0035);
-  // confete leve; remova se não quiser em todo impacto
-  confettiBurst(scene, x, y, "spark", 16);
+  const lv = Math.max(1, Math.log2(Math.max(2, value))); // 2->1, 4->2, ...
+  const color = opts?.color ?? 0x9be1ff;
+
+  // Punch sempre (amplitude suave por nível)
+  const amt = Phaser.Math.Clamp(0.06 + lv * 0.005, 0.06, 0.13);
+  if (target) popPunch(scene, target, amt, 120, { yoyo: true });
+
+  // Anel sempre (raio cresce levemente por nível)
+  const radius = Phaser.Math.Clamp(12 + lv * 1.6, 12, 26);
+  ringPulse(scene, x, y, color, radius, 170);
+
+  // Confete a partir de 32
+  if (value >= 32) {
+    const count = value >= 256 ? 22 : 12;
+    confettiBurst(scene, x, y, "spark", count);
+  }
+
+  // Micro shake a partir de 512
+  if (value >= 512) cameraKick(scene, 90, 0.0035);
 }
