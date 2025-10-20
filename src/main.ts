@@ -16,6 +16,8 @@ import OptionsScene from "./scenes/OptionsScene";
 import Phaser from "phaser";
 import { PreloadScene } from "./scenes/PreloadScene";
 import ThemeScene from "./scenes/ThemeScene";
+import PanelScene from "./panel/PanelScene";
+import TechCodexScene from "./codex/TechCodexScene";
 
 /**
  * Boot do app.
@@ -69,7 +71,7 @@ async function boot() {
       default: "arcade",
       arcade: { debug: false },
     },
-    scene: [PreloadScene,MenuScene, OptionsScene, ThemeScene, GameScene,ModesScene],
+    scene: [PreloadScene,MenuScene, OptionsScene, ThemeScene, GameScene,ModesScene, PanelScene, TechCodexScene],
   };
 
   new Phaser.Game(config);

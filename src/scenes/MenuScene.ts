@@ -110,6 +110,18 @@ export default class MenuScene extends Phaser.Scene {
     ui.add(play);
     y += spacing;
 
+
+    const codexPanel = new MenuButton(
+      this,
+      cx,
+      y,
+      t("menu_codex"),
+      () => swapTo(this, "PanelScene", {}, "fade"),
+      btnWidth
+    );
+    ui.add(codexPanel);
+    y += spacing;
+
     const modes = new MenuButton(
       this,
       cx,
