@@ -2,21 +2,30 @@ import Phaser from "phaser";
 import { listUnlockedIds } from "../achievements/tracker";
 import { ACHIEVEMENTS, ModuleKey } from "../achievements/achievements";
 import { CODEX } from "./codexData";
+import { getTheme } from "../theme";
+import { MenuIcon } from "../ui/MenuIcon";
+import { PANEL_COLORS } from "../panel/panelLayout";
 
 type Entry = typeof CODEX[number];
+type ThemeColors = ReturnType<typeof getTheme>["colors"];
 
+/**
+ * TechCodexScene - Redesign completo com foco em mobile
+ *
+ * Layout:
+ * - Header fixo com título e stats
+ * - Filtros em chips horizontais (scroll horizontal)
+ * - Cards de entradas em grid responsivo
+ * - Modal full-screen para leitura
+ */
 export default class TechCodexScene extends Phaser.Scene {
-  private search = "";
-  private filterModule: ModuleKey | "ALL" = "ALL";
-  private listCont!: Phaser.GameObjects.Container;
-  private readCont!: Phaser.GameObjects.Container;
-  private maskRect!: Phaser.GameObjects.Rectangle;
-  private scrollY = 0;
-  private rowH = 54;
-  private visible: Entry[] = [];
   private unlocked = new Set<string>();
-  private isNarrow = false;
-  private drawer?: Phaser.GameObjects.Container;
+  private filterModule: ModuleKey | "ALL" = "ALL";
+  private searchQuery = "";
+  private scrollY = 0;
+  private contentContainer!: Phaser.GameObjects.Container;
+  private maskRect!: Phaser.GameObjects.Rectangle;
+  private detailModal?: Phaser.GameObjects.Container;
 
   constructor() {
     super("TechCodexScene");
@@ -24,326 +33,474 @@ export default class TechCodexScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale;
-    this.isNarrow = width < 640;
+    const theme = getTheme();
+    const c = theme.colors;
 
-    // bg
-    this.add.rectangle(width / 2, height / 2, width, height, 0x0a0f1c);
-    this.add.text(24, 24, "Tech Codex", {
-      fontSize: "26px",
-      color: "#c8e9ff",
-      fontFamily: "Arial, Helvetica, sans-serif",
-    });
-    this.add.text(24, 56, "Conhecimento que você desbloqueia jogando. Pesquise, filtre e leia.", {
-      fontSize: "14px",
-      color: "#8fb7d1",
-      fontFamily: "Arial, Helvetica, sans-serif",
-    });
+    // Fundo
+    this.cameras.main.setBackgroundColor(c.bg);
+    this.createGridBackground(width, height, c);
 
-    // estado de desbloqueio -> codexId vindo das conquistas desbloqueadas
+    // Carregar desbloqueios
     const unlockedIds = new Set(listUnlockedIds());
-    for (const a of ACHIEVEMENTS) if (a.codexId && unlockedIds.has(a.id)) this.unlocked.add(a.codexId);
+    for (const a of ACHIEVEMENTS) {
+      if (a.codexId && unlockedIds.has(a.id)) {
+        this.unlocked.add(a.codexId);
+      }
+    }
 
-    // barra lateral (categorias)
-    const side = this.add.container(24, 96);
-    const cats: (ModuleKey | "ALL")[] = ["ALL", "CPU", "RAM", "GPU", "IO", "NET", "PSU"];
-    let y = 0;
-    cats.forEach((cat) => {
-      const txt = this.add
-        .text(0, y, cat === "ALL" ? "Todos" : cat, {
-          fontSize: "14px",
-          color: "#e0efff",
-          backgroundColor: "#122235",
-          padding: { left: 10, right: 10, top: 6, bottom: 6 },
-          fontFamily: "Arial, Helvetica, sans-serif",
-        })
-        .setInteractive({ useHandCursor: true });
-      txt.on("pointerdown", () => {
-        this.filterModule = cat as any;
-        this.refreshList();
-      });
-      side.add(txt);
-      y += 34;
-    });
+    // Header fixo
+    this.createHeader(width, c);
 
-    // Campo de busca
-    const searchBg = this.add
-      .rectangle(180, 94, Math.max(220, width * 0.38), 28, 0x112233, 1)
-      .setStrokeStyle(1, 0x2a90b8, 0.8)
-      .setOrigin(0, 0);
-    const searchTxt = this.add
-      .text(188, 108, "buscar...", {
-        fontSize: "13px",
-        color: "#9bb0c3",
-        fontFamily: "Arial, Helvetica, sans-serif",
-      })
-      .setOrigin(0, 0.5);
-    this.input.keyboard?.on("keydown", (e: KeyboardEvent) => {
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        this.search += e.key;
-      } else if (e.key === "Backspace") this.search = this.search.slice(0, -1);
-      else if (e.key === "Escape") this.search = "";
-      searchTxt.setText(this.search || "buscar...");
-      this.scrollY = 0;
-      this.refreshList();
-    });
+    // Filtros horizontais
+    this.createFilters(width, c);
 
-    // Lista (mascarada)
-    this.maskRect = this.add
-      .rectangle(180, 140, Math.max(240, width * 0.42), height - 180, 0x000000, 0)
+    // Área de conteúdo com máscara
+    const contentTop = 180;
+    const contentHeight = height - contentTop;
+
+    this.maskRect = this.add.rectangle(0, contentTop, width, contentHeight, 0x000000, 0)
       .setOrigin(0, 0);
     const mask = this.maskRect.createGeometryMask();
 
-    this.listCont = this.add.container(180, 140);
-    this.listCont.setMask(mask);
+    this.contentContainer = this.add.container(0, contentTop);
+    this.contentContainer.setMask(mask);
 
-    // Painel de leitura (direita) ou drawer no mobile
-    if (this.isNarrow) {
-      this.readCont = this.add.container(0, 0); // não usado diretamente
-    } else {
-      this.readCont = this.add.container(width * 0.64, 96);
-    }
+    // Renderizar cards
+    this.renderCards(width, contentHeight, c);
 
-    // rolagem
-    this.input.on(
-      "wheel",
-      (_p: any, _g: any, _dx: number, dy: number) => {
-        if (
-          this.input.activePointer.x < this.maskRect.x ||
-          this.input.activePointer.x > this.maskRect.x + this.maskRect.width ||
-          this.input.activePointer.y < this.maskRect.y ||
-          this.input.activePointer.y > this.maskRect.y + this.maskRect.height
-        )
-          return;
-        this.scrollY = Phaser.Math.Clamp(this.scrollY - dy, -9999, 0);
-        this.listCont.y = 140 + this.scrollY;
-        this.refreshListWindow(); // virtualização
-      },
-      this,
-    );
-
-    // toque: arrastar para rolar
-    let dragging = false;
-    let ly = 0;
-    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (
-        p.x >= this.maskRect.x &&
-        p.x <= this.maskRect.x + this.maskRect.width &&
-        p.y >= this.maskRect.y &&
-        p.y <= this.maskRect.y + this.maskRect.height
-      ) {
-        dragging = true;
-        ly = p.y;
-      }
-    });
-    this.input.on("pointerup", () => (dragging = false));
-    this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
-      if (!dragging) return;
-      const dy = p.y - ly;
-      ly = p.y;
-      this.scrollY = Phaser.Math.Clamp(this.scrollY + dy, -9999, 0);
-      this.listCont.y = 140 + this.scrollY;
-      this.refreshListWindow();
-    });
-
-    this.refreshList();
+    // Touch scroll
+    this.setupScrolling();
   }
 
-  // atualiza lista com busca + filtro (rederiza janela visível)
-  private refreshList() {
-    const q = (this.search || "").toLowerCase();
-    const matches = (e: Entry) =>
-      (this.filterModule === "ALL" || e.module === this.filterModule) &&
-      (q === "" ||
-        e.title.toLowerCase().includes(q) ||
-        e.body.join(" ").toLowerCase().includes(q));
+  private createGridBackground(width: number, height: number, c: ThemeColors) {
+    const grid = this.add.graphics();
+    grid.setDepth(-10);
 
-    this.visible = CODEX.filter(matches);
-    this.refreshListWindow();
+    const gridColor = Phaser.Display.Color.HexStringToColor(c.gridLine || "#1a2332").color;
+    grid.lineStyle(1, gridColor, 0.1);
 
-    // seletor default: primeiro desbloqueado
-    const firstUnlocked = this.visible.find((e) => this.unlocked.has(e.id));
-    if (firstUnlocked && !this.isNarrow) this.openEntry(firstUnlocked);
-    else if (!this.isNarrow) this.openEntry(null);
+    const spacing = 40;
+    for (let x = 0; x < width; x += spacing) {
+      grid.lineBetween(x, 0, x, height);
+    }
+    for (let y = 0; y < height; y += spacing) {
+      grid.lineBetween(0, y, width, y);
+    }
   }
 
-  private refreshListWindow() {
-    const { height } = this.scale;
+  private createHeader(width: number, c: ThemeColors) {
+    const headerBg = this.add.graphics();
+    headerBg.fillStyle(Phaser.Display.Color.HexStringToColor(c.surface || "#0f0f16").color, 0.9);
+    headerBg.fillRoundedRect(0, 0, width, 120, { tl: 0, tr: 0, bl: 16, br: 16 });
+    headerBg.setDepth(100);
 
-    const rowH = this.rowH;
-    const totalH = this.visible.length * rowH;
-    const viewH = this.maskRect.height;
-    const startIdx = Math.max(0, Math.floor((-this.scrollY - 20) / rowH) - 6);
-    const endIdx = Math.min(this.visible.length, startIdx + Math.ceil(viewH / rowH) + 12);
+    // Borda inferior
+    const borderGlow = this.add.graphics();
+    borderGlow.lineStyle(2, Phaser.Display.Color.HexStringToColor(c.primary || "#66b8e0").color, 0.3);
+    borderGlow.lineBetween(0, 120, width, 120);
+    borderGlow.setDepth(101);
+    borderGlow.setBlendMode(Phaser.BlendModes.ADD);
 
-    this.listCont.removeAll(true);
-    let y = startIdx * rowH;
+    // Menu icon
+    new MenuIcon(this, width - 30, 30);
 
-    for (let i = startIdx; i < endIdx; i++) {
-      const e = this.visible[i];
-      const unlocked = this.unlocked.has(e.id);
-      const bg = this.add
-        .rectangle(0, y, this.maskRect.width, rowH - 6, unlocked ? 0x112233 : 0x0d1626, 1)
-        .setOrigin(0, 0)
-        .setStrokeStyle(1, unlocked ? 0x2a90b8 : 0x24364f, 0.8);
-      const title = this.add
-        .text(12, y + rowH / 2, e.title, {
-          fontSize: "14px",
-          color: unlocked ? "#e7f7ff" : "#8ea3b8",
-          fontFamily: "Arial, Helvetica, sans-serif",
-        })
-        .setOrigin(0, 0.5);
-      const lock = this.add
-        .text(this.maskRect.width - 18, y + rowH / 2, unlocked ? "🔓" : "🔒", {
-          fontSize: "14px",
-          color: "#c8e9ff",
-        })
-        .setOrigin(0.5);
-      const hit = this.add
-        .zone(0, y, this.maskRect.width, rowH - 6)
-        .setOrigin(0, 0)
-        .setInteractive({ useHandCursor: unlocked });
-
-      if (unlocked) {
-        const open = () => this.openEntry(e);
-        hit.on("pointerdown", open);
-        bg.on("pointerdown", open);
-        title.on("pointerdown", open);
-      }
-
-      this.listCont.add([bg, title, lock, hit]);
-      y += rowH;
-    }
-
-    // fundo de altura total para rolagem consistente
-    const spacer = this.add.rectangle(0, totalH, 1, 1, 0, 0).setOrigin(0, 0);
-    this.listCont.add(spacer);
-  }
-
-  private openEntry(entry: Entry | null) {
-    this.readCont.removeAll(true);
-    const { width, height } = this.scale;
-
-    if (this.isNarrow) {
-      // mobile: abre como drawer full-screen
-      this.openEntryDrawer(entry);
-      return;
-    }
-
-    const panel = this.add
-      .rectangle(0, 0, width * 0.32, height - 120, 0x0e1a2b, 1)
-      .setOrigin(0, 0)
-      .setStrokeStyle(2, 0x2a90b8, 0.8);
-    this.readCont.add(panel);
-
-    if (!entry) {
-      const msg = this.add
-        .text(16, 16, "Jogue para desbloquear conteúdos do Codex!", {
-          fontSize: "16px",
-          color: "#9bb0c3",
-          fontFamily: "Arial, Helvetica, sans-serif",
-          wordWrap: { width: panel.width - 32 },
-        })
-        .setOrigin(0, 0);
-      this.readCont.add(msg);
-      return;
-    }
-
-    const unlocked = this.unlocked.has(entry.id);
-    const title = this.add.text(16, 12, entry.title, { fontSize: "18px", color: "#c8e9ff", fontFamily: "Arial, Helvetica, sans-serif" });
-    this.readCont.add(title);
-
-    const sub = this.add.text(16, 40, unlocked ? "Desbloqueado" : "Bloqueado", {
-      fontSize: "12px",
-      color: unlocked ? "#9be35a" : "#ff8b66",
+    // Título
+    const title = this.add.text(24, 28, "Tech Codex", {
+      fontSize: "32px",
+      color: c.text,
       fontFamily: "Arial, Helvetica, sans-serif",
-    });
-    this.readCont.add(sub);
+      fontStyle: "bold"
+    }).setOrigin(0, 0);
+    title.setShadow(0, 0, c.glow, 16, true, true);
+    title.setResolution(2);
+    title.setDepth(200);
 
-    // progresso simples
-    const unlockedCount = Array.from(this.unlocked).length;
+    // Stats de progresso
+    const unlockedCount = this.unlocked.size;
     const total = CODEX.length;
-    const pct = Math.floor((unlockedCount / Math.max(1, total)) * 100);
-    const barBg = this.add.rectangle(16, 66, panel.width - 32, 8, 0x13243a).setOrigin(0, 0.5);
-    const bar = this.add.rectangle(16, 66, ((panel.width - 32) * pct) / 100, 8, 0x2a90b8).setOrigin(0, 0.5);
-    this.readCont.add(barBg);
-    this.readCont.add(bar);
+    const percentage = Math.floor((unlockedCount / total) * 100);
 
-    // corpo
-    const bodyStr = entry.body.join("\n\n");
-    const body = this.add.text(16, 96, bodyStr, {
+    const stats = this.add.text(24, 70, `${unlockedCount}/${total} Desbloqueados (${percentage}%)`, {
       fontSize: "14px",
-      color: "#e8f3ff",
-      fontFamily: "Arial, Helvetica, sans-serif",
-      wordWrap: { width: panel.width - 32 },
-    });
-    this.readCont.add(body);
+      color: c.textDim,
+      fontFamily: "Arial, Helvetica, sans-serif"
+    }).setOrigin(0, 0);
+    stats.setResolution(2);
+    stats.setDepth(200);
 
-    // voltar ao painel
-    const back = this.add
-      .text(panel.width - 16, panel.height - 14, "‹ Voltar ao Painel", {
-        fontSize: "14px",
-        color: "#ffffff",
-        backgroundColor: "#1b2a3a",
-        padding: { left: 10, right: 10, top: 6, bottom: 6 },
-        fontFamily: "Arial, Helvetica, sans-serif",
-      })
-      .setOrigin(1, 1)
-      .setInteractive({ useHandCursor: true });
-    back.on("pointerdown", () => this.scene.start("PanelScene"));
-    this.readCont.add(back);
+    // Barra de progresso
+    const barWidth = 200;
+    const barX = 24;
+    const barY = 95;
+
+    const barBg = this.add.graphics();
+    barBg.fillStyle(Phaser.Display.Color.HexStringToColor(c.gridLine || "#1a2332").color, 0.5);
+    barBg.fillRoundedRect(barX, barY, barWidth, 8, 4);
+    barBg.setDepth(200);
+
+    const barFill = this.add.graphics();
+    barFill.fillStyle(Phaser.Display.Color.HexStringToColor(c.primary || "#66b8e0").color, 0.8);
+    barFill.fillRoundedRect(barX, barY, (barWidth * percentage) / 100, 8, 4);
+    barFill.setDepth(201);
+    barFill.setBlendMode(Phaser.BlendModes.ADD);
   }
 
-  private openEntryDrawer(entry: Entry | null) {
-    const { width, height } = this.scale;
-    if (this.drawer) this.drawer.destroy(true);
+  private createFilters(_width: number, c: ThemeColors) {
+    const filterY = 135;
+    const categories: Array<{ key: ModuleKey | "ALL", label: string }> = [
+      { key: "ALL", label: "Todos" },
+      { key: "CPU", label: "CPU" },
+      { key: "RAM", label: "RAM" },
+      { key: "GPU", label: "GPU" },
+      { key: "IO", label: "I/O" },
+      { key: "NET", label: "NET" },
+      { key: "PSU", label: "PSU" },
+    ];
 
-    const c = this.add.container(0, height);
-    this.drawer = c;
+    let x = 16;
+    const chipHeight = 32;
 
-    const panel = this.add
-      .rectangle(0, 0, width, height, 0x0e1a2b, 1)
-      .setOrigin(0, 0)
-      .setStrokeStyle(2, 0x2a90b8, 0.8);
-    c.add(panel);
+    for (const cat of categories) {
+      const isActive = this.filterModule === cat.key;
+      const color = cat.key === "ALL" ?
+        Phaser.Display.Color.HexStringToColor(c.primary || "#66b8e0").color :
+        PANEL_COLORS[cat.key as ModuleKey];
 
-    const title = this.add.text(16, 16, entry ? entry.title : "Bloqueado", {
-      fontSize: "18px",
-      color: "#c8e9ff",
-      fontFamily: "Arial, Helvetica, sans-serif",
-    });
-    c.add(title);
+      // Background do chip
+      const chipBg = this.add.graphics();
+      chipBg.setDepth(150);
 
-    const bodyStr =
-      entry && entry.body ? entry.body.join("\n\n") : "Jogue para desbloquear este conteúdo.";
-    const body = this.add.text(16, 56, bodyStr, {
-      fontSize: "15px",
-      color: "#e8f3ff",
-      fontFamily: "Arial, Helvetica, sans-serif",
-      wordWrap: { width: width - 32 },
-    });
-    c.add(body);
+      if (isActive) {
+        chipBg.fillStyle(color, 0.3);
+        chipBg.lineStyle(2, color, 0.9);
+      } else {
+        chipBg.fillStyle(color, 0.1);
+        chipBg.lineStyle(1, color, 0.4);
+      }
 
-    const close = this.add
-      .text(width - 16, 16, "Fechar ✕", {
-        fontSize: "14px",
-        color: "#ffffff",
-        backgroundColor: "#1b2a3a",
-        padding: { left: 10, right: 10, top: 6, bottom: 6 },
+      const labelText = this.add.text(0, 0, cat.label, {
+        fontSize: "13px",
+        color: c.text,
         fontFamily: "Arial, Helvetica, sans-serif",
-      })
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true });
-    close.on("pointerdown", () => {
-      this.tweens.add({
-        targets: c,
-        y: height,
-        duration: 180,
-        ease: "sine.in",
-        onComplete: () => c.destroy(true),
+        fontStyle: isActive ? "bold" : "normal"
       });
-    });
-    c.add(close);
+      labelText.setResolution(2);
 
-    this.tweens.add({ targets: c, y: 0, duration: 200, ease: "sine.out" });
+      const chipWidth = labelText.width + 24;
+      chipBg.fillRoundedRect(x, filterY, chipWidth, chipHeight, 16);
+      chipBg.strokeRoundedRect(x, filterY, chipWidth, chipHeight, 16);
+
+      labelText.setPosition(x + chipWidth / 2, filterY + chipHeight / 2);
+      labelText.setOrigin(0.5);
+      labelText.setDepth(151);
+
+      // Hit zone
+      const hitZone = this.add.zone(x, filterY, chipWidth, chipHeight)
+        .setOrigin(0, 0)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(152);
+
+      hitZone.on("pointerdown", () => {
+        this.filterModule = cat.key;
+        this.scrollY = 0;
+        this.scene.restart();
+      });
+
+      // Hover effect
+      hitZone.on("pointerover", () => {
+        this.tweens.add({
+          targets: chipBg,
+          scaleX: 1.05,
+          scaleY: 1.05,
+          duration: 100,
+          ease: "back.out(2)"
+        });
+      });
+
+      hitZone.on("pointerout", () => {
+        chipBg.setScale(1);
+      });
+
+      x += chipWidth + 12;
+    }
+  }
+
+  private renderCards(width: number, _contentHeight: number, c: ThemeColors) {
+    this.contentContainer.removeAll(true);
+
+    // Filtrar entradas
+    const entries = CODEX.filter(entry => {
+      if (this.filterModule !== "ALL" && entry.module !== this.filterModule) {
+        return false;
+      }
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase();
+        return entry.title.toLowerCase().includes(q) ||
+               entry.body.join(" ").toLowerCase().includes(q);
+      }
+      return true;
+    });
+
+    // Layout responsivo
+    const cardWidth = Math.min(340, width - 32);
+    const cardHeight = 120;
+    const gap = 16;
+    const cols = Math.floor((width - 32) / (cardWidth + gap));
+    const startX = (width - (cols * (cardWidth + gap) - gap)) / 2;
+
+    let x = startX;
+    let y = 16;
+    let col = 0;
+
+    for (const entry of entries) {
+      const isUnlocked = this.unlocked.has(entry.id);
+
+      this.createCard(entry, x, y, cardWidth, cardHeight, isUnlocked, c);
+
+      col++;
+      if (col >= cols) {
+        col = 0;
+        x = startX;
+        y += cardHeight + gap;
+      } else {
+        x += cardWidth + gap;
+      }
+    }
+
+    // Mensagem se vazio
+    if (entries.length === 0) {
+      const emptyMsg = this.add.text(width / 2, 100, "Nenhuma entrada encontrada", {
+        fontSize: "16px",
+        color: c.textDim,
+        fontFamily: "Arial, Helvetica, sans-serif"
+      }).setOrigin(0.5);
+      this.contentContainer.add(emptyMsg);
+    }
+  }
+
+  private createCard(
+    entry: Entry,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    isUnlocked: boolean,
+    c: ThemeColors
+  ) {
+    const container = this.add.container(x, y);
+
+    // Background com cor do módulo (com fallback para cor padrão)
+    const moduleColor = PANEL_COLORS[entry.module as ModuleKey] || 0x66b8e0;
+    const bg = this.add.graphics();
+
+    if (isUnlocked) {
+      bg.fillStyle(Phaser.Display.Color.HexStringToColor(c.surface || "#0f0f16").color, 0.8);
+      bg.lineStyle(2, moduleColor, 0.6);
+    } else {
+      bg.fillStyle(Phaser.Display.Color.HexStringToColor(c.surface || "#0f0f16").color, 0.4);
+      bg.lineStyle(1, moduleColor, 0.3);
+    }
+
+    bg.fillRoundedRect(0, 0, w, h, 12);
+    bg.strokeRoundedRect(0, 0, w, h, 12);
+    container.add(bg);
+
+    // Tag do módulo
+    const moduleColorHex = `#${moduleColor.toString(16).padStart(6, '0')}`;
+    const tag = this.add.text(12, 12, entry.module || "???", {
+      fontSize: "11px",
+      color: c.text || "#ffffff",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      backgroundColor: moduleColorHex,
+      padding: { x: 8, y: 4 }
+    });
+    tag.setResolution(2);
+    container.add(tag);
+
+    // Título
+    const title = this.add.text(12, 40, entry.title, {
+      fontSize: "16px",
+      color: isUnlocked ? c.text : c.textDim,
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontStyle: "bold",
+      wordWrap: { width: w - 40 }
+    });
+    title.setResolution(2);
+    container.add(title);
+
+    // Preview do corpo (apenas se desbloqueado)
+    if (isUnlocked) {
+      const preview = `${entry.body[0].substring(0, 80)}...`;
+      const bodyPreview = this.add.text(12, 68, preview, {
+        fontSize: "12px",
+        color: c.textDim || "#8ea3b8",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        wordWrap: { width: w - 24 }
+      });
+      bodyPreview.setResolution(2);
+      container.add(bodyPreview);
+    } else {
+      // Ícone de cadeado
+      const lockIcon = this.add.text(w / 2, h / 2 + 10, "🔒", {
+        fontSize: "24px"
+      }).setOrigin(0.5);
+      container.add(lockIcon);
+    }
+
+    // Hit zone
+    const hitZone = this.add.zone(0, 0, w, h)
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: isUnlocked });
+
+    if (isUnlocked) {
+      hitZone.on("pointerdown", () => {
+        this.openDetailModal(entry, c);
+      });
+
+      hitZone.on("pointerover", () => {
+        this.tweens.add({
+          targets: container,
+          scaleX: 1.02,
+          scaleY: 1.02,
+          duration: 150,
+          ease: "back.out(1.5)"
+        });
+      });
+
+      hitZone.on("pointerout", () => {
+        container.setScale(1);
+      });
+    }
+
+    container.add(hitZone);
+    this.contentContainer.add(container);
+  }
+
+  private openDetailModal(entry: Entry, c: ThemeColors) {
+    const { width, height } = this.scale;
+
+    // Container do modal
+    const modal = this.add.container(0, height);
+    modal.setDepth(1000);
+    this.detailModal = modal;
+
+    // Overlay escuro
+    const overlay = this.add.rectangle(0, -height, width, height, 0x000000, 0.85)
+      .setOrigin(0, 0)
+      .setInteractive();
+    modal.add(overlay);
+
+    // Painel de conteúdo
+    const panelHeight = height * 0.85;
+    const panelY = height - panelHeight;
+
+    const panel = this.add.graphics();
+    const panelModuleColor = PANEL_COLORS[entry.module as ModuleKey] || 0x66b8e0;
+    panel.fillStyle(Phaser.Display.Color.HexStringToColor(c.surface || "#0f0f16").color, 1);
+    panel.fillRoundedRect(0, panelY, width, panelHeight, { tl: 24, tr: 24, bl: 0, br: 0 });
+    panel.lineStyle(2, panelModuleColor, 0.8);
+    panel.strokeRoundedRect(0, panelY, width, panelHeight, { tl: 24, tr: 24, bl: 0, br: 0 });
+    modal.add(panel);
+
+    // Botão fechar
+    const closeBtn = this.add.text(width - 24, panelY + 24, "✕", {
+      fontSize: "28px",
+      color: c.text,
+      fontFamily: "Arial, Helvetica, sans-serif"
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on("pointerdown", () => this.closeDetailModal());
+    modal.add(closeBtn);
+
+    // Tag do módulo
+    const modalModuleColor = PANEL_COLORS[entry.module as ModuleKey] || 0x66b8e0;
+    const modalModuleColorHex = `#${modalModuleColor.toString(16).padStart(6, '0')}`;
+    const tag = this.add.text(24, panelY + 24, entry.module || "???", {
+      fontSize: "12px",
+      color: c.text || "#ffffff",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      backgroundColor: modalModuleColorHex,
+      padding: { x: 10, y: 5 }
+    });
+    tag.setResolution(2);
+    modal.add(tag);
+
+    // Título
+    const title = this.add.text(24, panelY + 60, entry.title, {
+      fontSize: "24px",
+      color: c.text,
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontStyle: "bold",
+      wordWrap: { width: width - 48 }
+    });
+    title.setResolution(2);
+    modal.add(title);
+
+    // Corpo com scroll
+    const bodyContainer = this.add.container(0, panelY + 110);
+    const bodyText = this.add.text(24, 0, entry.body.join("\n\n"), {
+      fontSize: "15px",
+      color: c.text,
+      fontFamily: "Arial, Helvetica, sans-serif",
+      lineSpacing: 8,
+      wordWrap: { width: width - 48 }
+    });
+    bodyText.setResolution(2);
+    bodyContainer.add(bodyText);
+    modal.add(bodyContainer);
+
+    // Animar entrada
+    this.tweens.add({
+      targets: modal,
+      y: 0,
+      duration: 300,
+      ease: "back.out(1.2)"
+    });
+  }
+
+  private closeDetailModal() {
+    if (!this.detailModal) return;
+
+    const { height } = this.scale;
+    this.tweens.add({
+      targets: this.detailModal,
+      y: height,
+      duration: 250,
+      ease: "sine.in",
+      onComplete: () => {
+        this.detailModal?.destroy(true);
+        this.detailModal = undefined;
+      }
+    });
+  }
+
+  private setupScrolling() {
+    let isDragging = false;
+    let lastY = 0;
+
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.y < 180) return; // Não rolar no header/filtros
+      isDragging = true;
+      lastY = pointer.y;
+    });
+
+    this.input.on("pointerup", () => {
+      isDragging = false;
+    });
+
+    this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (!isDragging) return;
+
+      const deltaY = pointer.y - lastY;
+      lastY = pointer.y;
+
+      this.scrollY = Phaser.Math.Clamp(this.scrollY + deltaY, -5000, 0);
+      this.contentContainer.y = 180 + this.scrollY;
+    });
+
+    // Mouse wheel
+    this.input.on("wheel", (_p: any, _g: any, _dx: number, dy: number) => {
+      this.scrollY = Phaser.Math.Clamp(this.scrollY - dy, -5000, 0);
+      this.contentContainer.y = 180 + this.scrollY;
+    });
   }
 }

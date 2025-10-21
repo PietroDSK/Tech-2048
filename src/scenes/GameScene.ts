@@ -17,6 +17,7 @@ import { TileTrail } from "../animations/trail";
 import { getGlobalMusic } from "../audio/MusicSingleton";
 import { swapTo } from "../animations/transitions";
 import { t } from "../i18n";
+import { CircuitBackground } from "../backgrounds/CircuitBackground";
 
 // Progressão (perks)
 import { computeUpgrades, Upgrades as ActiveUpgrades } from "../progression/upgrades";
@@ -320,6 +321,7 @@ export default class GameScene extends Phaser.Scene {
 
   // FX
   private gridFX?: Phaser.GameObjects.Graphics;
+  private circuitBg?: CircuitBackground;
 
   // HUD
   private scoreHud?: ScoreHud;
@@ -357,6 +359,7 @@ export default class GameScene extends Phaser.Scene {
     new MenuIcon(this, this.scale.width - 30, 30);
 
     this.setupLayoutAndGrid();
+    this.createCircuitBackground();
     this.drawBoardBg();
     this.createGridFX();
 
@@ -555,6 +558,37 @@ export default class GameScene extends Phaser.Scene {
     const x = this.boardX + this.gap + c * (this.cellSize + this.gap);
     const y = this.boardY + this.gap + r * (this.cellSize + this.gap);
     return { x, y };
+  }
+
+  private createCircuitBackground() {
+    const c = this.theme.colors;
+    const { width, height } = this.scale;
+
+    // Criar fundo animado de circuitos
+    this.circuitBg = new CircuitBackground(
+      this,
+      width,
+      height,
+      {
+        primary: c.primary,
+        secondary: c.gridHighlight,
+        glow: c.glow,
+      },
+      -10, // depth bem atrás de tudo
+    );
+
+    // Ajustar opacidade baseado no tema - aumentado para mais destaque
+    const bgLuminance = this.getColorLuminance(c.bg);
+    const alpha = bgLuminance < 0.5 ? 0.22 : 0.15;
+    this.circuitBg.setAlpha(alpha);
+  }
+
+  private getColorLuminance(hex: string): number {
+    const rgb = Phaser.Display.Color.HexStringToColor(hex);
+    const r = rgb.red / 255;
+    const g = rgb.green / 255;
+    const b = rgb.blue / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
   private drawBoardBg() {
@@ -1166,15 +1200,16 @@ export default class GameScene extends Phaser.Scene {
                 op.newValue,
                 this.theme.colors.primary,
               );
-              floatLabel(this, cx, cy - 12, `+${op.newValue}`, "#9be1ff");
 
-              // >>> SCORE com perks (streak + overclock)
+              // >>> SCORE: Todos os merges dão pontos (baseados no valor resultante)
               const delta = applyScore(op.newValue, this.upgrades, this.streakBonusActive, this.overclockArmed);
               this.score += delta;
               this.registry.set("score", this.score);
               this.scoreHud?.to(this.score);
               this.music?.updateByScore?.(this.score);
               if (this.score === 1024 || this.score === 2048) this.music?.accentMilestone?.();
+
+              floatLabel(this, cx, cy - 12, `+${delta}`, "#9be1ff");
 
               if (op.newValue >= 1024) slowMo(this, 0.85, 120);
             };
@@ -1486,8 +1521,11 @@ export default class GameScene extends Phaser.Scene {
 
   shutdown() {
     hideBanner().catch(() => {});
+    this.circuitBg?.destroy();
   }
-  destroy() {}
+  destroy() {
+    this.circuitBg?.destroy();
+  }
 }
 
 // -----------------------------------------------------------------------------

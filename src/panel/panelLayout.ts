@@ -17,14 +17,22 @@ export const PANEL_NODES: PanelNode[] = [
   { key: "PSU", title: "Power Unit",  x: 0.50, y: 0.88, thresholds: [10, 20, 35] },
 ];
 
-/** Rotas ortogonais (L ou ┐┘) entre pares de nós */
-export const PANEL_CONNECTIONS: Array<[ModuleKey, ModuleKey, "hv" | "vh"]> = [
-  ["CPU", "RAM", "vh"], // vertical depois horizontal
-  ["CPU", "GPU", "vh"],
-  ["RAM", "IO",  "vh"],
-  ["GPU", "NET", "vh"],
-  ["IO",  "PSU", "hv"], // horizontal depois vertical
-  ["NET", "PSU", "hv"],
+/**
+ * Conexões diretas entre módulos (linhas retas simples)
+ * Cada conexão é [origem, destino]
+ */
+export const PANEL_CONNECTIONS: Array<[ModuleKey, ModuleKey]> = [
+  // CPU conecta a RAM e GPU
+  ["CPU", "RAM"],
+  ["CPU", "GPU"],
+
+  // RAM e GPU conectam aos seus barramentos
+  ["RAM", "IO"],
+  ["GPU", "NET"],
+
+  // IO e NET conectam ao PSU
+  ["IO", "PSU"],
+  ["NET", "PSU"],
 ];
 
 export const PANEL_COLORS: Record<ModuleKey, number> = {
