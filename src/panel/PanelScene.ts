@@ -9,6 +9,7 @@ import { getTheme } from "../theme";
 import { t } from "../i18n";
 import { MenuIcon } from "../ui/MenuIcon";
 import { UIButton, mapThemeToButtonTheme } from "../ui/Button";
+import { TECH_FONT } from "../util/fonts";
 
 type ThemeColors = ReturnType<typeof getTheme>["colors"];
 
@@ -118,7 +119,7 @@ export default class PanelScene extends Phaser.Scene {
     const title = this.add.text(24, 28, t("panel_title"), {
       fontSize: "32px",
       color: c.text,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontStyle: "bold"
     }).setOrigin(0, 0);
     title.setShadow(0, 0, c.glow, 16, true, true);
@@ -129,7 +130,7 @@ export default class PanelScene extends Phaser.Scene {
     const subtitle = this.add.text(24, 70, t("panel_subtitle"), {
       fontSize: "14px",
       color: c.textDim,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       wordWrap: { width: width - 48 }
     }).setOrigin(0, 0);
     subtitle.setResolution(2);

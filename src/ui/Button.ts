@@ -2,6 +2,7 @@
 
 import Phaser from "phaser";
 import { getTheme } from "../theme";
+import { TECH_FONT } from "../util/fonts";
 
 export type UIButtonVariant = "primary" | "secondary" | "ghost";
 export type UIButtonSize = "sm" | "md" | "lg";
@@ -104,7 +105,7 @@ export class UIButton extends Phaser.GameObjects.Container {
     // label (precisa criar primeiro para medir)
     const fontSize = this.sizeToFont(this._size);
     this.labelObj = scene.add.text(0, 0, opts.label, {
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontSize: `${fontSize}px`,
       color: this.resolveTextColor(),
       align: "center",

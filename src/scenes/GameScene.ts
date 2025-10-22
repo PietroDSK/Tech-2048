@@ -1,5 +1,9 @@
 // === Tech-2048 — GameScene com HUD de Score, progressão e ajustes mobile-first ===
 
+import { Upgrades as ActiveUpgrades, computeUpgrades } from "../progression/upgrades";
+import { applyScore, applySpawnLogic } from "../progression/applyUpgrades";
+import { GameSaveManager } from "../progression/GameSaveManager";
+import { getSafeInsets, getUIScale, lowGfxMode } from "../util/mobile";
 import { getSettings, setUnlocked2048 } from "../storage";
 import { getTheme, getTileColor } from "../theme";
 import { hideBanner, showBannerBottom } from "../native-ads";
@@ -11,21 +15,22 @@ import {
   showRewardedIfReady,
 } from "../ads/ads";
 
+import { CircuitBackground } from "../backgrounds/CircuitBackground";
 import { MenuIcon } from "../ui/MenuIcon";
 import Phaser from "phaser";
+import { ScoreHud } from "../ui/ScoreHud";
 import { TileTrail } from "../animations/trail";
 import { getGlobalMusic } from "../audio/MusicSingleton";
 import { swapTo } from "../animations/transitions";
 import { t } from "../i18n";
-import { CircuitBackground } from "../backgrounds/CircuitBackground";
 
 // Progressão (perks)
-import { computeUpgrades, Upgrades as ActiveUpgrades } from "../progression/upgrades";
-import { applySpawnLogic, applyScore } from "../progression/applyUpgrades";
+
+
 
 // Mobile utils + HUD
-import { getUIScale, getSafeInsets, lowGfxMode } from "../util/mobile";
-import { ScoreHud } from "../ui/ScoreHud";
+
+
 
 // -----------------------------------------------------------------------------
 // Tipos e helpers
@@ -34,6 +39,7 @@ interface GameModeData {
   mode: GameMode;
   rows?: number;
   cols?: number;
+  savedState?: import("../progression/GameSaveManager").GameSaveState;
 }
 interface ModeConfig {
   rows: number;
@@ -363,8 +369,13 @@ export default class GameScene extends Phaser.Scene {
     this.drawBoardBg();
     this.createGridFX();
 
-    this.spawnRandomTile();
-    this.spawnRandomTile();
+    // Carregar estado salvo ou iniciar novo jogo
+    if (data?.savedState) {
+      this.loadSavedState(data.savedState);
+    } else {
+      this.spawnRandomTile();
+      this.spawnRandomTile();
+    }
 
     this.registerInputs();
     this.fullRepaint();
@@ -380,6 +391,7 @@ export default class GameScene extends Phaser.Scene {
       this.feedbackToast(t("reward_undo_received"));
     });
 
+    // Iniciar música automaticamente
     const bootAudio = async () => {
       try {
         if (this.sound.locked) await this.sound.unlock();
@@ -400,6 +412,10 @@ export default class GameScene extends Phaser.Scene {
       }
     };
 
+    // Tentar iniciar automaticamente
+    bootAudio();
+
+    // Fallback: tentar novamente na primeira interação se falhar
     this.input.once("pointerdown", bootAudio);
     this.input.keyboard?.once("keydown", bootAudio);
 
@@ -445,9 +461,10 @@ export default class GameScene extends Phaser.Scene {
     const baseR = 18;
     const radius = Math.max(baseR, Math.round(22 * this.uiScale));
 
-    // SCORE HUD
-    const scoreY = this.safeTop + Math.round(14 * this.uiScale)
-    this.scoreHud = new ScoreHud(this, right - radius * 2 - 28,scoreY, this.theme);
+    // SCORE HUD - Posicionado no topo à esquerda do centro
+    const scoreX = width / 2 - Math.round(40 * this.uiScale);
+    const scoreY = this.safeTop + Math.round(10 * this.uiScale);
+    this.scoreHud = new ScoreHud(this, scoreX, scoreY, this.theme);
     this.scoreHud.set(this.score);
 
     // UNDO
@@ -1057,6 +1074,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.spawnRandomTile();
 
+    // Auto-save após cada jogada
+    this.saveGameState();
+
     if (!this.canMove()) {
       if (this.secondChanceAvailable && !this.secondChanceUsed) {
         const freed = this.triggerSecondChance();
@@ -1069,6 +1089,48 @@ export default class GameScene extends Phaser.Scene {
       this.onGameOver();
       this.showOverlay(t("no_moves_game_over"), false);
     }
+  }
+
+  private saveGameState(): void {
+    GameSaveManager.saveGame({
+      board: this.values,
+      score: this.score,
+      upgrades: this.upgrades,
+      mode: this.mode,
+    });
+  }
+
+  private loadSavedState(savedState: import("../progression/GameSaveManager").GameSaveState): void {
+    console.log("[GameScene] Loading saved state:", savedState);
+
+    // Restaurar score
+    this.score = savedState.score;
+    this.registry.set("score", this.score);
+
+    // Restaurar tabuleiro
+    this.values = savedState.board.map(row => [...row]);
+
+    // Recriar IDs para os tiles existentes
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.values[r][c] !== 0) {
+          this.ids[r][c] = this.seqId++;
+        }
+      }
+    }
+
+    // Criar tiles visuais para o estado carregado
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const val = this.values[r][c];
+        if (val !== 0) {
+          const id = this.ids[r][c] as Id;
+          this.createTile(id, r, c, val, false);
+        }
+      }
+    }
+
+    console.log("[GameScene] Saved state loaded successfully");
   }
 
   private triggerSecondChance(): boolean {
@@ -1192,20 +1254,16 @@ export default class GameScene extends Phaser.Scene {
                 else txt.setShadow(0, 0, "#000000", 2, true, true);
               }
 
-              impactEffect(
-                this,
-                cx,
-                cy,
-                (A.getData("core") as Phaser.GameObjects.Container) ?? A,
-                op.newValue,
-                this.theme.colors.primary,
-              );
-
               // >>> SCORE: Todos os merges dão pontos (baseados no valor resultante)
               const delta = applyScore(op.newValue, this.upgrades, this.streakBonusActive, this.overclockArmed);
               this.score += delta;
               this.registry.set("score", this.score);
-              this.scoreHud?.to(this.score);
+
+              // Garantir que o HUD seja atualizado
+              if (this.scoreHud) {
+                this.scoreHud.to(this.score);
+              }
+
               this.music?.updateByScore?.(this.score);
               if (this.score === 1024 || this.score === 2048) this.music?.accentMilestone?.();
 
@@ -1231,6 +1289,7 @@ export default class GameScene extends Phaser.Scene {
                 (this.data.get("tileTrail") as TileTrail | undefined)?.addSnapshot(B);
               },
               onComplete: () => {
+                console.log(`[TWEEN onComplete] Calling applyMerge for tile ${op.newValue}`);
                 B.destroy(true);
                 this.tiles.delete(op.consumedId);
                 applyMerge();
@@ -1247,7 +1306,9 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
       const last = toComplete.length ? toComplete[toComplete.length - 1] : tweens[tweens.length - 1];
-      last.setCallback("onComplete", () => {
+
+      // Em vez de sobrescrever onComplete, usar evento 'complete' que roda DEPOIS do onComplete
+      last.once("complete", () => {
         trail?.clear();
         this.fullRepaint();
         resolve();
@@ -1485,6 +1546,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   onGameOver() {
+    // Limpar save quando o jogo termina
+    GameSaveManager.clearSave();
+
     this.failedRuns++;
     if (this.failedRuns % 3 === 0) {
       showInterstitialIfReady().then((shown) => {

@@ -37,5 +37,17 @@
     <h2>Contact</h2>
     <p>For any questions, please reach out at: <a href="mailto:pietrodsk@gmail.com">pietrodsk@gmail.com</a></p>
   </div>
+  <a href="#" id="revoke-consent">Rever preferências de privacidade</a>
+
 </body>
+<script>
+  window.googlefc = window.googlefc || {};
+  window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
+  document.getElementById('revoke-consent').addEventListener('click', function (e) {
+    e.preventDefault();
+    googlefc.callbackQueue.push(function () {
+      googlefc.showRevocationMessage();
+    });
+  });
+</script>
 </html>

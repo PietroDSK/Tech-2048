@@ -1,7 +1,13 @@
 // BootScene.ts
+import { loadGoogleFonts } from "../util/fonts";
+
 export class BootScene extends Phaser.Scene {
   constructor(){ super('BootScene'); }
-  create() {
+
+  async create() {
+    // Load tech fonts first
+    await loadGoogleFonts();
+
     const btn = this.add.text(this.scale.width/2, this.scale.height/2, 'TAP TO START', {
       fontSize: '28px', color: '#0ff', backgroundColor: '#222', padding: { x: 12, y: 8 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });

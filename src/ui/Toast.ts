@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getTheme } from "../theme";
+import { TECH_FONT } from "../util/fonts";
 
 export function showToast(scene: Phaser.Scene, text: string, duration = 2000) {
   const { width } = scene.scale;
@@ -33,7 +34,7 @@ export function showToast(scene: Phaser.Scene, text: string, duration = 2000) {
   const tx = scene.add.text(x, y, text, {
     fontSize: "13px",
     color: c.text || "#ffffff",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    fontFamily: TECH_FONT,
     align: "center",
     wordWrap: { width: w - 24 }
   }).setOrigin(0.5).setDepth(1001);

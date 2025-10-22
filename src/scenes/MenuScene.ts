@@ -1,8 +1,11 @@
 // src/scenes/MenuScene.ts
 
 import { CircuitBackground } from "../backgrounds/CircuitBackground";
+import { GameSaveManager } from "../progression/GameSaveManager";
 import { MenuButton } from "../ui/MenuButton";
 import Phaser from "phaser";
+import { getGlobalMusic } from "../audio/MusicSingleton";
+import { getSettings } from "../storage";
 import { getTheme } from "../theme";
 import { hasUnlocked2048 } from "../storage";
 import { showPrivacyOptions } from "../privacy/consent";
@@ -96,6 +99,9 @@ export default class MenuScene extends Phaser.Scene {
     const alpha = bgLuminance < 0.5 ? 0.25 : 0.18;
     this.circuitBg.setAlpha(alpha);
 
+    // Iniciar música automaticamente
+    this.initMusic();
+
     // Root do menu (facilita layout/reset)
     const ui = this.add.container(0, 0).setName("menuRoot").setScrollFactor(0, 0);
 
@@ -176,6 +182,32 @@ export default class MenuScene extends Phaser.Scene {
     const btnWidth = Math.min(360, Math.floor(width * 0.84));
     let y = Math.round(height * 0.30);
 
+    // Botão Continue (apenas se houver jogo salvo)
+    const hasSavedGame = GameSaveManager.hasSavedGame();
+    if (hasSavedGame) {
+      const saveInfo = GameSaveManager.getSaveInfo();
+      const continueLabel = saveInfo
+        ? `${t("menu_continue")} (${saveInfo.score})`
+        : t("menu_continue");
+
+      const continueBtn = new MenuButton(
+        this,
+        cx,
+        y,
+        continueLabel,
+        () => {
+          // Carregar o jogo salvo
+          const savedState = GameSaveManager.loadGame();
+          if (savedState) {
+            swapTo(this, "GameScene", { savedState }, "fade");
+          }
+        },
+        btnWidth
+      );
+      ui.add(continueBtn);
+      y += spacing;
+    }
+
     const play = new MenuButton(
       this,
       cx,
@@ -253,22 +285,6 @@ export default class MenuScene extends Phaser.Scene {
     );
     ui.add(themes);
     y += spacing;
-    const exit = new MenuButton(
-      this,
-      cx,
-      y,
-      t("menu_exit"),
-      () => {
-        const cap = (window as any).Capacitor;
-        if (cap?.isNativePlatform?.()) {
-          (navigator as any).app?.exitApp?.() ?? this.game.destroy(true);
-        } else {
-          history.length > 1 ? history.back() : location.reload();
-        }
-      },
-      btnWidth
-    );
-    ui.add(exit);
 
     // Footer
     this.add.text(
@@ -320,5 +336,36 @@ export default class MenuScene extends Phaser.Scene {
       // E, por via das dúvidas, para de novo qualquer outra cena
       stopOtherScenesSafely(this);
     });
+  }
+
+  private initMusic() {
+    const settings = getSettings();
+
+    const bootAudio = async () => {
+      try {
+        if (this.sound.locked) await this.sound.unlock();
+        const ctx = (this.sound as any).context;
+        if (ctx && ctx.state !== "running") await ctx.resume();
+
+        if (settings.music !== false) {
+          const music = getGlobalMusic(this);
+          (music as any).attach?.(this);
+          if (!(music as any).isStarted?.()) music.init?.();
+          music.updateByScore?.(0);
+        }
+
+        this.input.off("pointerdown", bootAudio as any);
+        this.input.keyboard?.off("keydown", bootAudio as any);
+      } catch (e) {
+        console.warn("[MenuScene] Falha ao iniciar música:", e);
+      }
+    };
+
+    // Tentar iniciar automaticamente
+    bootAudio();
+
+    // Fallback: tentar novamente na primeira interação se falhar
+    this.input.once("pointerdown", bootAudio);
+    this.input.keyboard?.once("keydown", bootAudio);
   }
 }

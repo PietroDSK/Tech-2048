@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { PANEL_COLORS, PanelNode } from "./panelLayout";
+import { TECH_FONT } from "../util/fonts";
 
 export class ModuleChip extends Phaser.GameObjects.Container {
   private body!: Phaser.GameObjects.Rectangle;
@@ -38,10 +39,11 @@ export class ModuleChip extends Phaser.GameObjects.Container {
 
     // Rótulo
     this.label = scene.add.text(0, 0, node.title, {
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontSize: "14px",
       color: "#e7f7ff",
     }).setOrigin(0.5);
+    this.label.setResolution(2);
 
     this.add([this.body, this.label, this.led]);
     this.setLevel(level, baseColor);

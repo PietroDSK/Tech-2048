@@ -5,6 +5,7 @@ import { CODEX } from "./codexData";
 import { getTheme } from "../theme";
 import { MenuIcon } from "../ui/MenuIcon";
 import { PANEL_COLORS } from "../panel/panelLayout";
+import { TECH_FONT } from "../util/fonts";
 
 type Entry = typeof CODEX[number];
 type ThemeColors = ReturnType<typeof getTheme>["colors"];
@@ -108,7 +109,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const title = this.add.text(24, 28, "Tech Codex", {
       fontSize: "32px",
       color: c.text,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontStyle: "bold"
     }).setOrigin(0, 0);
     title.setShadow(0, 0, c.glow, 16, true, true);
@@ -123,7 +124,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const stats = this.add.text(24, 70, `${unlockedCount}/${total} Desbloqueados (${percentage}%)`, {
       fontSize: "14px",
       color: c.textDim,
-      fontFamily: "Arial, Helvetica, sans-serif"
+      fontFamily: TECH_FONT
     }).setOrigin(0, 0);
     stats.setResolution(2);
     stats.setDepth(200);
@@ -181,7 +182,7 @@ export default class TechCodexScene extends Phaser.Scene {
       const labelText = this.add.text(0, 0, cat.label, {
         fontSize: "13px",
         color: c.text,
-        fontFamily: "Arial, Helvetica, sans-serif",
+        fontFamily: TECH_FONT,
         fontStyle: isActive ? "bold" : "normal"
       });
       labelText.setResolution(2);
@@ -272,8 +273,9 @@ export default class TechCodexScene extends Phaser.Scene {
       const emptyMsg = this.add.text(width / 2, 100, "Nenhuma entrada encontrada", {
         fontSize: "16px",
         color: c.textDim,
-        fontFamily: "Arial, Helvetica, sans-serif"
+        fontFamily: TECH_FONT
       }).setOrigin(0.5);
+      emptyMsg.setResolution(2);
       this.contentContainer.add(emptyMsg);
     }
   }
@@ -310,7 +312,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const tag = this.add.text(12, 12, entry.module || "???", {
       fontSize: "11px",
       color: c.text || "#ffffff",
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       backgroundColor: moduleColorHex,
       padding: { x: 8, y: 4 }
     });
@@ -321,7 +323,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const title = this.add.text(12, 40, entry.title, {
       fontSize: "16px",
       color: isUnlocked ? c.text : c.textDim,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontStyle: "bold",
       wordWrap: { width: w - 40 }
     });
@@ -334,7 +336,7 @@ export default class TechCodexScene extends Phaser.Scene {
       const bodyPreview = this.add.text(12, 68, preview, {
         fontSize: "12px",
         color: c.textDim || "#8ea3b8",
-        fontFamily: "Arial, Helvetica, sans-serif",
+        fontFamily: TECH_FONT,
         wordWrap: { width: w - 24 }
       });
       bodyPreview.setResolution(2);
@@ -406,8 +408,9 @@ export default class TechCodexScene extends Phaser.Scene {
     const closeBtn = this.add.text(width - 24, panelY + 24, "✕", {
       fontSize: "28px",
       color: c.text,
-      fontFamily: "Arial, Helvetica, sans-serif"
+      fontFamily: TECH_FONT
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.setResolution(2);
     closeBtn.on("pointerdown", () => this.closeDetailModal());
     modal.add(closeBtn);
 
@@ -417,7 +420,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const tag = this.add.text(24, panelY + 24, entry.module || "???", {
       fontSize: "12px",
       color: c.text || "#ffffff",
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       backgroundColor: modalModuleColorHex,
       padding: { x: 10, y: 5 }
     });
@@ -428,7 +431,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const title = this.add.text(24, panelY + 60, entry.title, {
       fontSize: "24px",
       color: c.text,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       fontStyle: "bold",
       wordWrap: { width: width - 48 }
     });
@@ -440,7 +443,7 @@ export default class TechCodexScene extends Phaser.Scene {
     const bodyText = this.add.text(24, 0, entry.body.join("\n\n"), {
       fontSize: "15px",
       color: c.text,
-      fontFamily: "Arial, Helvetica, sans-serif",
+      fontFamily: TECH_FONT,
       lineSpacing: 8,
       wordWrap: { width: width - 48 }
     });
